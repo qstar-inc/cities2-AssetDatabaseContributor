@@ -1,10 +1,4 @@
 ﻿{
-  //"Option.ExtractIcons.Label": "Extract Icons",
-  //"Option.ExtractIcons.Desc": "",
-  //"Option.ExtractGamePrefabs.Label": "Extract Game Prefab Data",
-  //"Option.ExtractGamePrefabs.Desc": "",
-  //"Option.ExtractSubscribedPrefabs.Label": "Extract Subscribed Prefab Data",
-  //"Option.ExtractSubscribedPrefabs.Desc": "",
   "Option.ContribEnabled.Label": "Enable Contribution",
   "Option.ContribEnabled.Desc": "Help crowdsource asset data to the Cities 2 Asset Database. A game restart is required to change the state for the future sessions.",
   "Option.PackCount.Label": "Package Count",
