@@ -1,0 +1,41 @@
+# Asset Database Contributor
+Help crowdsource asset data for the Cities 2 Asset Database.
+
+# IMPORTANT: Please read before subscribing...
+Help build the public Cities 2 Asset Database by contributing information about the mods you have installed.
+
+## This mod connects to the Asset Database server
+By subscribing to this mod, you acknowledge that it can communicate with the online Asset Database server to upload asset information after you have given your consent.
+
+### Why contribute?
+The Cities 2 Asset Database (work-in-progress) is built entirely from community contribution. Every player who chooses to participate helps improve the database for everyone.
+
+On first launch, you will be asked whether you want to contribute.
+
+If you agree, you'll be given two options:
+- Anonymous contribution: only asset data is uploaded.
+- Public contribution: your user information is also uploaded so your contributions can appear on the public leaderboard.
+This is completely optional.
+
+### Then what?
+After consent is given, the mod will:
+- Check whether the server requires data.
+- Scan your subscribed mods for missing asset information.
+- Verify randomly selected packages using Simple Mod Checker Plus to ensure they match the published PDX Mods version.
+- Randomly choose up to 20 verified packages.
+- Extract the required asset data, localization, icons and other metadata.
+- Upload the collected information to the Asset Database server.
+
+### What data is uploaded?
+The uploads include various data about prefab assets and related files about subscribed prefab assets. No local assets or runtime generated assets are processed.
+
+If you choose Public contribution, your user information (PDX Username and UserId) is also included so your contributions can be credited publicly.
+
+Nothing else is accessed by this mod.
+
+# TL;DR
+- No gameplay data is uploaded.
+- Only uploads asset-related information.
+- User identity is optional.
+- Consent can be revoked from the Options UI.
+- Uploads happen in the background only once per session soon after on game startup.
