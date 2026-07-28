@@ -409,7 +409,7 @@ namespace AssetDatabaseContributor.Systems
                 since != null
                     ? $"{ApiBase}/cs2db/source-data?since={since}"
                     : $"{ApiBase}/cs2db/source-data";
-            LogHelper.SendLog($"HTTP url: {url}", LogLevel.DEVD);
+            //LogHelper.SendLog($"HTTP url: {url}", LogLevel.DEVD);
 
             HttpResponseMessage response;
 
