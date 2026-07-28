@@ -1,1 +1,1 @@
-- Minor bug fix.
+- Fix SMC integration when playset includes non public mods.

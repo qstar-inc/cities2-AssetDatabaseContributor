@@ -21,6 +21,7 @@ using Game.SceneFlow;
 using Game.UI.Menu;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using PDX.SDK.Contracts.Service.Mods.Enums;
 using StarQ.Shared.Extensions;
 using StarQ.Shared.Types;
 using static AssetDatabaseContributor.Systems.ExtractionSystem;
@@ -91,10 +92,16 @@ namespace AssetDatabaseContributor.Systems
             foreach (var item in loadedPackages)
             {
                 if (
-                    item.Value.AccessControl
-                    != PDX.SDK.Contracts.Service.Mods.Enums.ModAccessControlLevelState.Public
+                    item.Value.AccessControl == null
+                    || item.Value.AccessControl != ModAccessControlLevelState.Public
                 )
+                {
+                    LogHelper.SendLog(
+                        $"Skipping {item.Key} [{item.Value.Id}] because it is {item.Value.AccessControl}",
+                        LogLevel.DEVD
+                    );
                     continue;
+                }
 
                 packages.Add(item.Value.Id + "_" + item.Value.Version);
 #if DEBUG
@@ -335,6 +342,10 @@ namespace AssetDatabaseContributor.Systems
                         Size = (ulong)(remoteType.GetProperty("Size")?.GetValue(remoteObj) ?? 0UL),
                         Active = (bool)(
                             remoteType.GetProperty("Active")?.GetValue(remoteObj) ?? false
+                        ),
+                        AccessControl = (ModAccessControlLevelState)(
+                            remoteType.GetProperty("AccessControl")?.GetValue(remoteObj)
+                            ?? ModAccessControlLevelState.Unknown
                         ),
                     };
 #pragma warning restore CS8601 // Possible null reference assignment.
