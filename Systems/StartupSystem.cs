@@ -513,7 +513,7 @@ namespace AssetDatabaseContributor.Systems
 
             ModsToCheck = modsToCheck;
 
-            foreach (string item in packages)
+            foreach (string item in ModsToCheck)
             {
                 string[] splits = item.Split("_") ?? Array.Empty<string>();
                 if (splits.Length > 1)
