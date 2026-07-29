@@ -1,3 +1,2 @@
-- Added large zip separation.
-- Added server data version control.
-- Added clamps to options.
+- Add strict component check.
+- Any mods containing foreign components will be rejected.

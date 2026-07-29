@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
@@ -80,6 +79,7 @@ namespace AssetDatabaseContributor.Systems
             ModsAdded.Clear();
             ImagesNeeded.Clear();
             ComponentLib.Clear();
+            LoadExistingComponentLib();
             DateTime now = DateTime.UtcNow;
             LogHelper.SendLog($"Starting extraction at {now.ToLocalTime()}...", LogLevel.DEVD);
 
@@ -143,16 +143,6 @@ namespace AssetDatabaseContributor.Systems
                 string path = string.Empty;
                 string guid = string.Empty;
 
-                Dictionary<string, object> objects = new();
-                foreach (ComponentBase item in prefabBase.components)
-                {
-                    Dictionary<string, object?> compData = DumpObject(item);
-                    if (compData == null)
-                        continue;
-                    string compName = item.GetType().Name;
-                    objects[compName] = compData;
-                }
-
                 string source = "";
                 string sourceId = "";
                 string sourceVersion = "";
@@ -211,8 +201,27 @@ namespace AssetDatabaseContributor.Systems
 
                 GetLocalesToExtract(prefabBase, source, sourceId, sourceVersion, localesToExtract);
 
-                Dictionary<string, object?> pData = DumpObject(prefabBase);
+                string sourceIdVersion = $"{sourceId}_{sourceVersion}";
+
+                if (ModsToReject.Contains(sourceIdVersion))
+                    continue;
+
+                Dictionary<string, object> objects = new();
+
+                Dictionary<string, object?>? pData = DumpObject(prefabBase, sourceIdVersion);
+                if (pData == null)
+                    continue;
+
                 objects[prefabType] = pData;
+
+                foreach (ComponentBase item in prefabBase.components)
+                {
+                    Dictionary<string, object?>? compData = DumpObject(item, sourceIdVersion);
+                    if (compData == null)
+                        continue;
+                    string compName = item.GetType().Name;
+                    objects[compName] = compData;
+                }
 
                 if (prefabBase.TryGet(out UIObject UIO))
                 {
@@ -460,67 +469,70 @@ namespace AssetDatabaseContributor.Systems
                 }
             }
 
-            #region comp_attr extraction
-            ValidateComponentLib();
-            if (ComponentLib.Count > 0)
-            {
-                LogHelper.SendLog(
-                    $"==================================================",
-                    LogLevel.DEVD
-                );
-                string zipPath = Path.Combine(baseDirectory, $"~ADC_{timeNow}_compAttr.zip");
-                using ZipArchive archive = ZipFile.Open(zipPath, ZipArchiveMode.Create);
+            //#region comp_attr extraction
+            //ValidateComponentLib();
+            //if (ComponentLib.Count > 0)
+            //{
+            //    LogHelper.SendLog(
+            //        $"==================================================",
+            //        LogLevel.DEVD
+            //    );
+            //    string zipPath = Path.Combine(baseDirectory, $"~ADC_{timeNow}_compAttr.zip");
+            //    using ZipArchive archive = ZipFile.Open(zipPath, ZipArchiveMode.Create);
 
-                using StreamWriter wrt_ca = new(
-                    archive
-                        .CreateEntry(
-                            "components_attr.tsv",
-                            System.IO.Compression.CompressionLevel.Optimal
-                        )
-                        .Open()
-                );
+            //    using StreamWriter wrt_ca = new(
+            //        archive
+            //            .CreateEntry(
+            //                "components_attr.tsv",
+            //                System.IO.Compression.CompressionLevel.Optimal
+            //            )
+            //            .Open()
+            //    );
 
-                var sorted = ComponentLib
-                    .OrderBy(x => x.comp)
-                    .ThenBy(x => x.index)
-                    .ThenBy(x => x.attr)
-                    .ThenBy(x => x.type);
+            //    var sorted = ComponentLib
+            //        .OrderBy(x => x.comp)
+            //        .ThenBy(x => x.index)
+            //        .ThenBy(x => x.attr)
+            //        .ThenBy(x => x.type);
 
-                List<ComponentAttributeRow> componentAttributeRow = new();
-                foreach (var (index, comp, attr, type, note) in sorted)
-                {
-                    componentAttributeRow.Add(
-                        new ComponentAttributeRow
-                        {
-                            comp_name = comp,
-                            index = index,
-                            attr_name = attr,
-                            attr_type = type,
-                            note = note,
-                        }
-                    );
-                }
+            //    List<ComponentAttributeRow> componentAttributeRow = new();
+            //    foreach (var (index, comp, attr, type, note) in sorted)
+            //    {
+            //        componentAttributeRow.Add(
+            //            new ComponentAttributeRow
+            //            {
+            //                comp_name = comp,
+            //                index = index,
+            //                attr_name = attr,
+            //                attr_type = type,
+            //                note = note,
+            //            }
+            //        );
+            //    }
 
-                wrt_ca.Write(CSV.Serialize(componentAttributeRow, GetCSVSetting()));
+            //    wrt_ca.Write(CSV.Serialize(componentAttributeRow, GetCSVSetting()));
 
-                //foreach (var (index, comp, attr, type, note) in sorted)
-                //{
-                //    wrt_ca.Write(
-                //        new object[] { comp, index, attr, type, note }.ToCSVString(GetCSVSetting())
-                //    );
-                //}
+            //    //foreach (var (index, comp, attr, type, note) in sorted)
+            //    //{
+            //    //    wrt_ca.Write(
+            //    //        new object[] { comp, index, attr, type, note }.ToCSVString(GetCSVSetting())
+            //    //    );
+            //    //}
 
-                LogHelper.SendLog(
-                    $"Wrote {ComponentLib.Count()} component attributes to 'components_attr.tsv'",
-                    LogLevel.DEVD
-                );
-            }
-            #endregion comp_attr extraction
+            //    LogHelper.SendLog(
+            //        $"Wrote {ComponentLib.Count()} component attributes to 'components_attr.tsv'",
+            //        LogLevel.DEVD
+            //    );
+            //}
+            //#endregion comp_attr extraction
 
             LogHelper.SendLog($"==================================================", LogLevel.DEVD);
         }
 
-        public static Dictionary<string, object?> DumpObject(ComponentBase obj)
+        public static Dictionary<string, object?>? DumpObject(
+            ComponentBase obj,
+            string sourceIdVersion
+        )
         {
             Dictionary<string, object?>? result = new() { };
 
@@ -533,6 +545,17 @@ namespace AssetDatabaseContributor.Systems
             int i = 0;
 
             Type type = obj.GetType();
+
+            bool valid = IsValidComponent(type.Name);
+            if (!valid)
+            {
+                ModsToReject.Add(sourceIdVersion);
+                LogHelper.SendLog(
+                    $"{sourceIdVersion} got rejected because it contains {type.Name} component"
+                );
+                return null;
+            }
+
             ComponentLib.Add((i++, type.Name, "", "", ""));
             foreach (FieldInfo field in type.GetFields(flags))
             {
@@ -546,8 +569,7 @@ namespace AssetDatabaseContributor.Systems
                 {
                     result[field.Name] = DumpValue(
                         $"{obj.name}=>{field.Name}",
-                        field.GetValue(obj),
-                        log: field.Name == "m_ContentPrerequisite"
+                        field.GetValue(obj)
                     );
                 }
                 catch (Exception e)
@@ -563,12 +585,7 @@ namespace AssetDatabaseContributor.Systems
             return result;
         }
 
-        private static object? DumpValue(
-            string name,
-            object? value,
-            int depth = 0,
-            bool log = false
-        )
+        private static object? DumpValue(string name, object? value, int depth = 0)
         {
             if (depth > 10)
                 return "<max_depth>";
@@ -615,7 +632,7 @@ namespace AssetDatabaseContributor.Systems
                 List<object?> listResult = new(list.Count);
 
                 foreach (var item in list)
-                    listResult.Add(DumpValue(name, item, depth, log));
+                    listResult.Add(DumpValue(name, item, depth));
 
                 return listResult;
             }
@@ -630,7 +647,7 @@ namespace AssetDatabaseContributor.Systems
             {
                 try
                 {
-                    result[field.Name] = DumpValue(name, field.GetValue(value), depth, log);
+                    result[field.Name] = DumpValue(name, field.GetValue(value), depth);
                 }
                 catch (Exception e)
                 {

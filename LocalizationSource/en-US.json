@@ -9,6 +9,8 @@
   "Option.ResetConsent.Desc": "Clears saved consent choices. A prompt to review and set preferences will appear during your next session.\nFor data deletion requests, please contact on Discord or the Paradox forum.",
   "Option.PrivacyPolicy.Label": "Privacy Policy",
   "Option.PrivacyPolicy.Desc": "Open the Privacy Policy page in a browser and read how your data is collected, used, and protected.",
+  "Option.CleanLocalSource.Label": "Clean up Local Source",
+  "Option.CleanLocalSource.Desc": "Clean up the local cache about what mod is available on the server. The cache is not meant to be 100% accurate but rather a list of packages to skip specificly from your game.\nTo be used for debugging purposes only.",
   "Notif.Init": "Initializing data",
   "Notif.Starting": "Starting sharing",
   "Notif.Verifying": "Verifying packages",

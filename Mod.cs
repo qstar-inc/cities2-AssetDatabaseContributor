@@ -18,26 +18,6 @@ namespace AssetDatabaseContributor
             LogHelper.Init(Id, log);
             LocaleHelper.Init(Id, Name, GetReplacements);
 
-#if DEBUG
-            LocaleHelper.AddLocalization(
-                LocaleHelper.GetOptionsLabelLocaleId(nameof(m_Setting.ExtractGamePrefabs)),
-                "Extract Game Prefabs"
-            );
-            LocaleHelper.AddLocalization(
-                LocaleHelper.GetOptionsLabelLocaleId(nameof(m_Setting.ExtractSubscribedPrefabs)),
-                "Extract Subscribed Prefabs"
-            );
-            LocaleHelper.AddLocalization(
-                LocaleHelper.GetOptionsDescLocaleId(nameof(m_Setting.ExtractGamePrefabs)),
-                "Extract Game Prefabs"
-            );
-            LocaleHelper.AddLocalization(
-                LocaleHelper.GetOptionsDescLocaleId(nameof(m_Setting.ExtractSubscribedPrefabs)),
-                "Extract Subscribed Prefabs"
-            );
-            LocaleHelper.FlushLocalizationQueue();
-#endif
-
             m_Setting = new Setting(this);
             m_Setting.RegisterInOptionsUI();
             AssetDatabase.global.LoadSettings(

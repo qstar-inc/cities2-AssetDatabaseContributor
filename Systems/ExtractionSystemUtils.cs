@@ -95,23 +95,28 @@ namespace AssetDatabaseContributor.Systems
             string note
         )> ComponentLib { get; set; } = new();
 
-        private HashSet<(
-            int index,
-            string comp,
-            string attr,
-            string type,
-            string note
-        )> LoadExistingComponentLib()
+        //private HashSet<(
+        //    int index,
+        //    string comp,
+        //    string attr,
+        //    string type,
+        //    string note
+        //)> LoadExistingComponentLib()
+        private void LoadExistingComponentLib()
         {
-            var result =
-                new HashSet<(int index, string comp, string attr, string type, string note)>();
+            //if (CachedComponentAttributes.Count > 0)
+            //    return CachedComponentAttributes;
+
+            //var result =
+            //    new HashSet<(int index, string comp, string attr, string type, string note)>();
 
             Assembly? assembly = ModHelper.GetModExecutable(Mod.Id)?.assembly;
 
             if (assembly == null)
             {
                 LogHelper.SendLog("Something went wrong, could not find own assembly");
-                return result;
+                //return result;
+                return;
             }
 
             //string path = Path.Combine(ModHelper.GetModPath(Mod.Instance), "components_attr.tsv");
@@ -131,7 +136,8 @@ namespace AssetDatabaseContributor.Systems
             if (resource == null)
             {
                 LogHelper.SendLog("Something went wrong, could not find own embedded TSV");
-                return result;
+                //return result;
+                return;
             }
 
             using GZipStream gzip = new(resource, CompressionMode.Decompress);
@@ -139,70 +145,91 @@ namespace AssetDatabaseContributor.Systems
             using CSVReader reader = new(streamReader, GetCSVSetting());
 
             List<ComponentAttributeRow> rows = reader.Deserialize<ComponentAttributeRow>();
+            HashSet<string> validComps = new();
 
             foreach (ComponentAttributeRow row in rows)
-                result.Add((row.index, row.comp_name, row.attr_name, row.attr_type, row.note));
-
-            return result;
-        }
-
-        private void ValidateComponentLib()
-        {
-            var existing = LoadExistingComponentLib();
-
-            var existingGroups = existing
-                .GroupBy(x => x.comp)
-                .ToDictionary(g => g.Key, g => g.ToHashSet());
-
-            var currentGroups = ComponentLib
-                .GroupBy(x => x.comp)
-                .ToDictionary(g => g.Key, g => g.ToHashSet());
-
-            var filtered =
-                new HashSet<(int index, string comp, string attr, string type, string note)>();
-
-            foreach (var (comp, currentRows) in currentGroups)
             {
-                if (!existingGroups.TryGetValue(comp, out var existingRows))
-                {
-                    LogHelper.SendLog(
-                        $"Component '{comp}' is new and will be added to the component library."
-                    );
-                    filtered.UnionWith(currentRows);
-                    continue;
-                }
-
-                if (!currentRows.SetEquals(existingRows))
-                {
-                    var currentByAttr = currentRows.ToDictionary(r => r.attr);
-                    var existingByAttr = existingRows.ToDictionary(r => r.attr);
-
-                    foreach (var attr in currentByAttr.Keys.Intersect(existingByAttr.Keys))
-                    {
-                        var current = currentByAttr[attr];
-                        var existin = existingByAttr[attr];
-
-                        if (current.type != existin.type || current.note != existin.note)
-                        {
-                            LogHelper.SendLog(
-                                $"Component '{comp}', attribute '{attr}' changed:\n"
-                                    + $"  Type: {existin.type} -> {current.type}\n"
-                                    + $"  Note: {existin.note} -> {current.note}",
-                                LogLevel.Info
-                            );
-                        }
-                    }
-
-                    filtered.UnionWith(currentRows);
-                }
+                //result.Add((row.index, row.comp_name, row.attr_name, row.attr_type, row.note));
+                validComps.Add(row.comp_name);
             }
 
-            ComponentLib = filtered;
+            //CachedComponentAttributes = result;
+
+            ValidComponents = validComps.ToList();
+
+            //return result;
         }
+
+        //public static new HashSet<(
+        //    int index,
+        //    string comp,
+        //    string attr,
+        //    string type,
+        //    string note
+        //)> CachedComponentAttributes = new();
+
+        public static List<string> ValidComponents = new();
+
+        public static bool IsValidComponent(string typeName) => ValidComponents.Contains(typeName);
+
+        //private void ValidateComponentLib()
+        //{
+        //    var existing = LoadExistingComponentLib();
+
+        //    var existingGroups = existing
+        //        .GroupBy(x => x.comp)
+        //        .ToDictionary(g => g.Key, g => g.ToHashSet());
+
+        //    var currentGroups = ComponentLib
+        //        .GroupBy(x => x.comp)
+        //        .ToDictionary(g => g.Key, g => g.ToHashSet());
+
+        //    var filtered =
+        //        new HashSet<(int index, string comp, string attr, string type, string note)>();
+
+        //    foreach (var (comp, currentRows) in currentGroups)
+        //    {
+        //        if (!existingGroups.TryGetValue(comp, out var existingRows))
+        //        {
+        //            LogHelper.SendLog(
+        //                $"Component '{comp}' is new and will be added to the component library."
+        //            );
+        //            filtered.UnionWith(currentRows);
+        //            continue;
+        //        }
+
+        //        if (!currentRows.SetEquals(existingRows))
+        //        {
+        //            var currentByAttr = currentRows.ToDictionary(r => r.attr);
+        //            var existingByAttr = existingRows.ToDictionary(r => r.attr);
+
+        //            foreach (var attr in currentByAttr.Keys.Intersect(existingByAttr.Keys))
+        //            {
+        //                var current = currentByAttr[attr];
+        //                var existin = existingByAttr[attr];
+
+        //                if (current.type != existin.type || current.note != existin.note)
+        //                {
+        //                    LogHelper.SendLog(
+        //                        $"Component '{comp}', attribute '{attr}' changed:\n"
+        //                            + $"  Type: {existin.type} -> {current.type}\n"
+        //                            + $"  Note: {existin.note} -> {current.note}",
+        //                        LogLevel.Info
+        //                    );
+        //                }
+        //            }
+
+        //            filtered.UnionWith(currentRows);
+        //        }
+        //    }
+
+        //    ComponentLib = filtered;
+        //}
 
         internal static readonly HashSet<string> ImagesNeeded = new();
 
         internal static HashSet<string> ModsToCheck = new();
+        internal static HashSet<string> ModsToReject = new();
         internal static HashSet<string> ModsAdded = new();
 
         public static FileSystemDataSource.PathEscapePolicy kPathEscapePolicy = new();

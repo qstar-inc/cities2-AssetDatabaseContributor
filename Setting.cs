@@ -1,4 +1,7 @@
-﻿using AssetDatabaseContributor.Systems;
+﻿using System.Collections.Generic;
+using System.Text.RegularExpressions;
+using System.Threading.Tasks;
+using AssetDatabaseContributor.Systems;
 using Game.Modding;
 using Game.Settings;
 using Game.UI;
@@ -66,9 +69,16 @@ namespace AssetDatabaseContributor
             set => VariableHelper.OpenURL("https://cities2.starq.fyi/privacy-policy");
         }
 
-#if !DEBUG
-        [SettingsUIHidden]
-#endif
+        [SettingsUIButton]
+        [SettingsUISection(GeneralTab, GeneralGroup)]
+        public bool CleanLocalSource
+        {
+            set { StartupSystem.CleanLocalSource(); }
+        }
+
+#if DEBUG
+        [SettingsUIDisplayName(overrideValue: "Extract Game Prefabs")]
+        [SettingsUIDescription(overrideValue: "Extract Game Prefabs")]
         [SettingsUISection(GeneralTab, GeneralGroup)]
         [SettingsUIButton]
         public bool ExtractGamePrefabs
@@ -81,19 +91,55 @@ namespace AssetDatabaseContributor
             }
         }
 
-#if !DEBUG
-        [SettingsUIHidden]
-#endif
+        [SettingsUITextInput]
+        [SettingsUISection(GeneralTab, GeneralGroup)]
+        [SettingsUIDisplayName(overrideValue: "Mod To Check")]
+        [SettingsUIDescription(overrideValue: "Comma seperated list")]
+        [SettingsUISetter(typeof(Setting), nameof(ValidateSubs))]
+        public string ModToCheck { get; set; } = "";
+
+        public void ValidateSubs()
+        {
+            var ids = ModToCheck.Split(',');
+            HashSet<string> list = new();
+            foreach (var id in ids)
+            {
+                var trimmed = id.Trim();
+                if (Regex.IsMatch(trimmed, @"^\d+_\d+$"))
+                    list.Add(trimmed);
+            }
+
+            if (list.Count <= 0)
+            {
+                LogHelper.SendLog("Nothing found");
+                return;
+            }
+            LogHelper.SendLog($"Adding {list.Count}: {string.Join(",", list)}");
+            ExtractionSystem.ModsToCheck = list;
+        }
+
+        [SettingsUIDisplayName(overrideValue: "Extract Mod Prefabs")]
+        [SettingsUIDescription(overrideValue: "Extract Mod Prefabs")]
         [SettingsUISection(GeneralTab, GeneralGroup)]
         [SettingsUIButton]
         public bool ExtractSubscribedPrefabs
         {
             set
             {
+                ValidateSubs();
+
+                WorldHelper.RunOnMainThreadAsync(
+                    WorldHelper.GetSystem<StartupSystem>().CollectImages
+                );
+
+                Task.Run(WorldHelper.GetSystem<StartupSystem>().ZipImages);
+
                 WorldHelper
                     .GetSystem<ExtractionSystem>()
                     .ExtractPrefabs(ExtractionSystem.Limits.Mod);
             }
         }
+
+#endif
     }
 }

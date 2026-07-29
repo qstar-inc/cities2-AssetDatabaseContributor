@@ -1354,6 +1354,8 @@ LocalEffects	0
 LocalEffects	1	m_Effects	Game.Prefabs.LocalEffectInfo[]	
 LocalEffectsPrefab	0			
 LocalEffectsPrefab	1	m_Effects	Game.Prefabs.LocalEffectInfo[]	
+Localization	0			
+Localization	1	m_LocalizationID	System.String	
 LodProperties	0			
 LodProperties	1	m_Bias	System.Single	
 LodProperties	2	m_ShadowBias	System.Single	
@@ -2203,6 +2205,8 @@ ResourceConnection	1	m_Resource	Game.Economy.ResourceInEditor
 ResourceConnection	2	m_ConnectionWarningNotification	Game.Prefabs.NotificationIconPrefab	
 ResourceConsumer	0			
 ResourceConsumer	1	m_NoResourceNotificationPrefab	Game.Prefabs.NotificationIconPrefab	
+ResourceConsumption	0			
+ResourceConsumption	1	m_Consumptions	Game.Prefabs.ResourceConsumptionItem[]	
 ResourcePrefab	0			
 ResourcePrefab	1	m_Color	UnityEngine.Color	
 ResourcePrefab	2	m_Resource	Game.Economy.ResourceInEditor	

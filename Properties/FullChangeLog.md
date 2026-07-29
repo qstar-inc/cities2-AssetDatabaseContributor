@@ -18,3 +18,7 @@
 - Added large zip separation.
 - Added server data version control.
 - Added clamps to options.
+
+# 1.0.6
+- Add strict component check.
+- Any mods containing foreign components will be rejected.

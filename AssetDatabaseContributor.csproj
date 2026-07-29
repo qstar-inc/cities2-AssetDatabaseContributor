@@ -2,7 +2,7 @@
   <PropertyGroup>
     <AssemblyName>AssetDatabaseContributor</AssemblyName>
     <AssemblyTitle>Asset Database Contributor</AssemblyTitle>
-    <Version>1.0.5</Version>
+    <Version>1.0.6</Version>
   </PropertyGroup>
   <Import Project="$([System.Environment]::GetEnvironmentVariable('CSII_TOOLPATH', 'EnvironmentVariableTarget.User'))\Mod.props" />
   <Import Project="$([System.Environment]::GetEnvironmentVariable('CSII_TOOLPATH', 'EnvironmentVariableTarget.User'))\Mod.targets" />
@@ -20,7 +20,7 @@
     Inputs="EmbedCustom\components_attr.tsv"
     Outputs="EmbedCustom\components_attr.tsv.gz"
   >
-    <Exec Command="&quot;C:\Program Files\7-Zip-Zstandard\7z.exe&quot; a -tgzip &quot;EmbedCustom\components_attr.tsv.gz&quot; &quot;EmbedCustom\components_attr.tsv&quot; -y" />
+    <Exec Command="if exist &quot;EmbedCustom\components_attr.tsv.gz&quot; del /Q &quot;EmbedCustom\components_attr.tsv.gz&quot; &amp; &quot;C:\Program Files\7-Zip-Zstandard\7z.exe&quot; a -tgzip &quot;EmbedCustom\components_attr.tsv.gz&quot; &quot;EmbedCustom\components_attr.tsv&quot; -y" />
   </Target>
 
   <ItemGroup>

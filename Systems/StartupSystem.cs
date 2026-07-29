@@ -550,7 +550,7 @@ namespace AssetDatabaseContributor.Systems
             );
 
             LogHelper.SendLog(
-                $"Validating max {validableMax} packages from {packagesToValidate.Count} of {string.Join(", ", packagesToValidate)}"
+                $"Validating max {validableMax} out of {packagesToValidate.Count} packages"
             );
 
             HashSet<string> modsToCheck = (
@@ -594,6 +594,13 @@ namespace AssetDatabaseContributor.Systems
         {
             try
             {
+                if (ModsToReject.Count > 0)
+                {
+                    LogHelper.SendLog(
+                        $"{ModsToReject.Count} mods were rejected for extraction: {string.Join(",", ModsToReject)}"
+                    );
+                }
+
                 if (ModsToCheck.Count <= 0)
                 {
                     CancelTask($"No mods selected to check", LogLevel.DEVD);
@@ -610,6 +617,24 @@ namespace AssetDatabaseContributor.Systems
 
         public async Task SubmitZips()
         {
+            if (ModsToReject.Count > 0)
+            {
+                var payload = new { rejects = ModsToReject.ToList() };
+
+                using HttpRequestMessage? rejectReq = new(
+                    HttpMethod.Post,
+                    $"{ApiBase}/cs2db/rejected"
+                );
+                rejectReq.Content = new StringContent(
+                    JsonConvert.SerializeObject(payload),
+                    Encoding.UTF8,
+                    "application/json"
+                );
+                rejectReq.Headers.Add("X-Api-Key", ApiKeyLocal.Value);
+
+                HttpResponseMessage? response = await Http.SendAsync(rejectReq);
+            }
+
             LogHelper.SendLog("Starting SubmitZips", LogLevel.DEVD);
             if (!Directory.Exists($"{Mod.DataDir}\\~Extracted"))
             {
@@ -1173,6 +1198,13 @@ namespace AssetDatabaseContributor.Systems
             }
 
             return true;
+        }
+
+        public static void CleanLocalSource()
+        {
+            SourceDataCache newCache = new() { ServerTime = 0, Rows = new List<SourceDataRow>() };
+
+            File.WriteAllText(SourceDataPath, JsonConvert.SerializeObject(newCache));
         }
     }
 }
