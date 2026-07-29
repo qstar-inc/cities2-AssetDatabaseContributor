@@ -22,3 +22,6 @@
 # 1.0.6
 - Add strict component check.
 - Any mods containing foreign components will be rejected.
+
+# 1.0.7
+- Fix server URL pointing to localhost.
