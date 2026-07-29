@@ -1,0 +1,19 @@
+﻿{
+  "Option.ContribEnabled.Label": "Habilitar contribución",
+  "Option.ContribEnabled.Desc": "Ayuda a los datos de recursos de crowdsource a la base de datos de activos de Cities 2. Es necesario reiniciar el juego para cambiar el estado de las sesiones futuras.",
+  "Option.PackCount.Label": "Número de paquetes",
+  "Option.PackCount.Desc": "El número máximo de paquetes a enviar en una sesión.",
+  "Option.Cooldown.Label": "Tiempo de espera",
+  "Option.Cooldown.Desc": "El número mínimo de minutos a esperar antes de volver a comprobar la solicitud de envío.",
+  "Option.ResetConsent.Label": "Restablecer consentimiento",
+  "Option.ResetConsent.Desc": "Elimina las opciones de consentimiento guardadas. En tu próxima sesión aparecerá un aviso para revisar y configurar tus preferencias.\nPara solicitudes de eliminación de datos, por favor contacta a través de Discord o del foro de Paradox.",
+  "Option.PrivacyPolicy.Label": "Política de Privacidad",
+  "Option.PrivacyPolicy.Desc": "Abra la página de Política de Privacidad en un navegador y lea cómo sus datos son recogidos, utilizados y protegidos.",
+  "Notif.Init": "Inicializando datos",
+  "Notif.Starting": "Comenzando a compartir",
+  "Notif.Sharing": "Compartiendo",
+  "Notif.Completed": "Se ha compartido con éxito",
+  "Notif.Cancelled": "Se ha cancelado el compartir",
+  "GeneralConsentText": "¿Está de acuerdo en compartir datos de activos de su juego con la base de datos de activos de Cities 2?",
+  "UsernameConsentText": "¿Quieres que tu nombre de usuario \"{username}\" aparezca en la lista de colaboradores?"
+}

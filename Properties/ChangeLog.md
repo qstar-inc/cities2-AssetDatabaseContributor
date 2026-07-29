@@ -1,1 +1,3 @@
-- Fix SMC integration when playset includes non public mods.
+- Added large zip separation.
+- Added server data version control.
+- Added clamps to options.

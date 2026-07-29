@@ -81,9 +81,8 @@ namespace AssetDatabaseContributor.Systems
             ImagesNeeded.Clear();
             ComponentLib.Clear();
             DateTime now = DateTime.UtcNow;
-            LogHelper.SendLog($"Starting extraction at {now.ToLocalTime()}...");
+            LogHelper.SendLog($"Starting extraction at {now.ToLocalTime()}...", LogLevel.DEVD);
 
-            Stopwatch stopwatch = Stopwatch.StartNew();
             string timeNow = $"{now:yyyy-MM-dd-HH-mm-ss}";
 
             //int i = 0;
@@ -519,9 +518,6 @@ namespace AssetDatabaseContributor.Systems
             #endregion comp_attr extraction
 
             LogHelper.SendLog($"==================================================", LogLevel.DEVD);
-
-            stopwatch.Stop();
-            LogHelper.SendLog($"Done in {stopwatch.Elapsed}s");
         }
 
         public static Dictionary<string, object?> DumpObject(ComponentBase obj)

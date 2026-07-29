@@ -1,12 +1,15 @@
 ﻿using System.Collections.Generic;
 using System.IO;
+using System.IO.Compression;
 using System.Linq;
+using System.Reflection;
 using Colossal.IO.AssetDatabase;
 using Colossal.PSI.Common;
 using CSVFile;
 using Game;
 using Game.Prefabs;
 using StarQ.Shared.Extensions;
+using static Game.Rendering.Debug.RenderPrefabRenderer;
 
 namespace AssetDatabaseContributor.Systems
 {
@@ -103,15 +106,38 @@ namespace AssetDatabaseContributor.Systems
             var result =
                 new HashSet<(int index, string comp, string attr, string type, string note)>();
 
-            string path = Path.Combine(ModHelper.GetModPath(Mod.Instance), "components_attr.tsv");
+            Assembly? assembly = ModHelper.GetModExecutable(Mod.Id)?.assembly;
 
-            if (!File.Exists(path))
+            if (assembly == null)
+            {
+                LogHelper.SendLog("Something went wrong, could not find own assembly");
                 return result;
+            }
 
-            if (File.ReadLines(path).Count() == 0)
+            //string path = Path.Combine(ModHelper.GetModPath(Mod.Instance), "components_attr.tsv");
+
+            //if (!File.Exists(path))
+            //    return result;
+
+            //if (File.ReadLines(path).Count() == 0)
+            //    return result;
+
+            //using CSVReader reader = new(new StreamReader(path), GetCSVSetting());
+
+            using Stream resource = assembly.GetManifestResourceStream(
+                $"{Mod.Id}.EmbedCustom.components_attr.tsv.gz"
+            );
+
+            if (resource == null)
+            {
+                LogHelper.SendLog("Something went wrong, could not find own embedded TSV");
                 return result;
+            }
 
-            using CSVReader reader = new(new StreamReader(path), GetCSVSetting());
+            using GZipStream gzip = new(resource, CompressionMode.Decompress);
+            using StreamReader streamReader = new(gzip);
+            using CSVReader reader = new(streamReader, GetCSVSetting());
+
             List<ComponentAttributeRow> rows = reader.Deserialize<ComponentAttributeRow>();
 
             foreach (ComponentAttributeRow row in rows)

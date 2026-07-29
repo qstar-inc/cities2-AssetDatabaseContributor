@@ -47,9 +47,11 @@ Nothing else is accessed by this mod.
   <Screenshot Value="" />
   <Tag Value="Code Mod" />
   <ForumLink Value="https://forum.paradoxplaza.com/forum/threads/starq-mods-assets-projects-megathread.1930389/" />
-  <ModVersion Value="1.0.3" />
+  <ModVersion Value="1.0.5" />
   <GameVersion Value="1.6.0*" />
-  <ChangeLog>- Fix SMC integration when playset includes non public mods.</ChangeLog>
+  <ChangeLog>- Added large zip separation.
+- Added server data version control.
+- Added clamps to options.</ChangeLog>
   <ExternalLink Type="github" Url="https://github.com/qstar-inc/cities2-AssetDatabaseContributor" />
   <ExternalLink Type="discord" Url="https://discord.gg/U2PSjUzUuF" />
   <ExternalLink Type="buymeacoffee" Url="https://buymeacoffee.com/starq" />

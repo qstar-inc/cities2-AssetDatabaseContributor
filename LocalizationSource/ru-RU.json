@@ -11,7 +11,6 @@
   "Option.PrivacyPolicy.Desc": "Open the Privacy Policy page in a browser and read how your data is collected, used, and protected.",
   "Notif.Init": "Initializing data",
   "Notif.Starting": "Starting sharing",
-  "Notif.Verifying": "Verifying packages",
   "Notif.Sharing": "Sharing in progress",
   "Notif.Completed": "Sharing completed successfully",
   "Notif.Cancelled": "Sharing cancelled",

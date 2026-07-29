@@ -32,11 +32,20 @@ namespace AssetDatabaseContributor
         [SettingsUISection(GeneralTab, GeneralGroup)]
         public bool ContribEnabled { get; set; } = false;
 
-        [SettingsUISlider(max = 20, min = 3, unit = Unit.kInteger)]
+        [SettingsUISlider(
+            max = Constants.PackCountMax,
+            min = Constants.PackCountMin,
+            unit = Unit.kInteger
+        )]
         [SettingsUISection(GeneralTab, GeneralGroup)]
         public int PackCount { get; set; } = 10;
 
-        [SettingsUISlider(max = 6 * 60, min = 10, step = 10, unit = Unit.kInteger)]
+        [SettingsUISlider(
+            max = Constants.CooldownMax,
+            min = Constants.CooldownMin,
+            step = 10,
+            unit = Unit.kInteger
+        )]
         [SettingsUISection(GeneralTab, GeneralGroup)]
         public int Cooldown { get; set; } = 60;
 
@@ -47,12 +56,11 @@ namespace AssetDatabaseContributor
             set { SetDefaults(); }
         }
 
-        [SettingsUIHidden]
-        public bool Enabled = false;
+        bool DisabledPrivacyPolicy => true;
 
         [SettingsUIButton]
         [SettingsUISection(GeneralTab, GeneralGroup)]
-        [SettingsUIDisableByCondition(typeof(Setting), nameof(Enabled))]
+        [SettingsUIDisableByCondition(typeof(Setting), nameof(DisabledPrivacyPolicy))]
         public bool PrivacyPolicy
         {
             set => VariableHelper.OpenURL("https://cities2.starq.fyi/privacy-policy");

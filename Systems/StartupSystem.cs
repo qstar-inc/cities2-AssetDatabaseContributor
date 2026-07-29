@@ -36,7 +36,13 @@ namespace AssetDatabaseContributor.Systems
         private static bool TaskRunning = false;
         private static bool Disabled = false;
         private static bool Cancelled = false;
+
+#if DEBUG
+        private static readonly string SourceDataPath = $"{Mod.DataDir}\\SourceData_debug.json";
+#else
         private static readonly string SourceDataPath = $"{Mod.DataDir}\\SourceData.json";
+#endif
+
         private static long lastServerTime = 0;
         private static readonly HashSet<SourceDataRow> AllSources = new();
 
@@ -45,6 +51,8 @@ namespace AssetDatabaseContributor.Systems
 
         private static string Username = string.Empty;
         private const string ApiBase = ApiKeyLocal.Web;
+
+        private Stopwatch? stopwatch = null;
 
         protected override void OnCreate()
         {
@@ -217,6 +225,7 @@ namespace AssetDatabaseContributor.Systems
                     return;
                 }
 
+                stopwatch = Stopwatch.StartNew();
                 await Task.Run(GetExtractData);
                 if (Cancelled)
                     return;
@@ -226,7 +235,7 @@ namespace AssetDatabaseContributor.Systems
                 await WorldHelper.RunOnMainThreadAsync(CollectImages);
                 if (Cancelled)
                     return;
-                await Task.Run(SubmitImages);
+                await Task.Run(ZipImages);
                 if (Cancelled)
                     return;
                 await Task.Run(SubmitZips);
@@ -240,7 +249,7 @@ namespace AssetDatabaseContributor.Systems
                     notifIdentifier,
                     text: LocaleHelper.Translate($"{notifIdentifier}.Completed"),
                     progressState: ProgressState.Complete,
-                    delay: 3000
+                    delay: 10
                 );
 
                 SourceDataCache newCache = new()
@@ -255,6 +264,16 @@ namespace AssetDatabaseContributor.Systems
                     $"Wrote latest SourceData for ServerTime {newCache.ServerTime}",
                     LogLevel.DEVD
                 );
+
+                LogHelper.SendLog(
+                    $"Successfully contributed with {ModsAdded.Count} mod data: {string.Join(", ", ModsAdded)}"
+                );
+
+                if (stopwatch.IsRunning)
+                {
+                    stopwatch.Stop();
+                    LogHelper.SendLog($"Done in {stopwatch.Elapsed}");
+                }
             }
             catch (Exception ex)
             {
@@ -268,7 +287,7 @@ namespace AssetDatabaseContributor.Systems
         {
             try
             {
-                SMC = ModHelper.GetModAssembly("SimpleModCheckerPlus");
+                SMC = ModHelper.GetModExecutable("SimpleModCheckerPlus");
                 if (SMC == null)
                 {
                     LogHelper.SendLog($"SMC assembly not found? How?");
@@ -368,7 +387,10 @@ namespace AssetDatabaseContributor.Systems
         public async Task GetExtractData()
         {
             AllSources.Clear();
-            int secDiff = Mod.m_Setting.Cooldown * 60; //in seconds
+            int secDiff =
+                Math.Clamp(Mod.m_Setting.Cooldown, Constants.CooldownMin, Constants.CooldownMax)
+                * 0
+                * 60; //in seconds
 #if DEBUG
             secDiff = 0;
 #endif
@@ -411,7 +433,10 @@ namespace AssetDatabaseContributor.Systems
                 }
                 catch (Exception ex)
                 {
-                    LogHelper.SendLog(ex, LogLevel.Info);
+                    LogHelper.SendLog(
+                        $"Exception while reading SourceData: {ex.Message}",
+                        LogLevel.Info
+                    );
                     cache = null;
                 }
             }
@@ -420,7 +445,6 @@ namespace AssetDatabaseContributor.Systems
                 since != null
                     ? $"{ApiBase}/cs2db/source-data?since={since}"
                     : $"{ApiBase}/cs2db/source-data";
-            //LogHelper.SendLog($"HTTP url: {url}", LogLevel.DEVD);
 
             HttpResponseMessage response;
 
@@ -429,6 +453,7 @@ namespace AssetDatabaseContributor.Systems
                 LogHelper.SendLog("Downloading latest SourceData", LogLevel.DEVD);
                 using HttpRequestMessage request = new(HttpMethod.Get, url);
                 request.Headers.Add("X-Api-Key", ApiKeyLocal.Value);
+                request.Headers.Add("X-Version", "2");
                 response = await Http.SendAsync(request);
             }
             catch (HttpRequestException ex)
@@ -443,6 +468,7 @@ namespace AssetDatabaseContributor.Systems
                 else
                 {
                     LogHelper.SendLog(ex, LogLevel.Info);
+                    CancelTask("Unknown error occured");
                 }
                 return;
             }
@@ -505,17 +531,42 @@ namespace AssetDatabaseContributor.Systems
                 .OrderBy(_ => rng.Next())
                 .ToList();
 
+            if (packagesToValidate.Count <= 0)
+            {
+                CancelTask($"No unknown mods found to be scanned");
+                return;
+            }
+
+            NotificationSystem.Push(
+                notifIdentifier,
+                text: LocaleHelper.Translate($"{notifIdentifier}.Verifying"),
+                progressState: ProgressState.Indeterminate
+            );
+
+            int validableMax = Math.Clamp(
+                Mod.m_Setting.PackCount,
+                Constants.PackCountMin,
+                Constants.PackCountMax
+            );
+
+            LogHelper.SendLog(
+                $"Validating max {validableMax} packages from {packagesToValidate.Count} of {string.Join(", ", packagesToValidate)}"
+            );
+
             HashSet<string> modsToCheck = (
-                await ValidateModFoldersAsync(packagesToValidate)
+                await ValidateModFoldersAsync(packagesToValidate, validableMax)
             ).ToHashSet();
 
             if (modsToCheck.Count <= 0)
             {
-                CancelTask($"No mods found to be scanned");
+                CancelTask($"No verified mods found to be scanned");
                 return;
             }
 
-            LogHelper.SendLog($"Mods selected to be scanned:\n{string.Join(", ", modsToCheck)}");
+            LogHelper.SendLog(
+                $"Starting scan for {modsToCheck.Count} {string.Join(", ", modsToCheck)}"
+            );
+
             NotificationSystem.Push(
                 notifIdentifier,
                 text: LocaleHelper.Translate($"{notifIdentifier}.Starting"),
@@ -573,7 +624,7 @@ namespace AssetDatabaseContributor.Systems
                 return;
             }
 
-            if (ModsAdded.Count <= 0 && Mod.m_Setting.ConsentForUsernameShare)
+            if (ModsAdded.Count > 0 && Mod.m_Setting.ConsentForUsernameShare)
             {
                 var payload = new
                 {
@@ -669,10 +720,9 @@ namespace AssetDatabaseContributor.Systems
                     LogHelper.SendLog(ex, LogLevel.Info);
                 }
             }
-            CleanupFolders();
         }
 
-        private List<CollectedImage> collectedImages = new();
+        private readonly List<CollectedImage> CollectedImages = new();
 
         public void CollectImages()
         {
@@ -682,7 +732,7 @@ namespace AssetDatabaseContributor.Systems
                 return;
             }
 
-            collectedImages.Clear();
+            CollectedImages.Clear();
 
             string tempDir = $"{Mod.DataDir}\\~ImagesTemp";
             Directory.CreateDirectory(tempDir);
@@ -719,7 +769,7 @@ namespace AssetDatabaseContributor.Systems
                     string hash = FileHelper.Sha256FromBytes(hashBytes);
                     long size = new FileInfo(destPath).Length;
 
-                    collectedImages.Add(
+                    CollectedImages.Add(
                         new CollectedImage
                         {
                             Guid = guid,
@@ -738,18 +788,18 @@ namespace AssetDatabaseContributor.Systems
                     );
                 }
             }
-            LogHelper.SendLog($"Collected {collectedImages.Count} images in memory", LogLevel.DEVD);
+            LogHelper.SendLog($"Collected {CollectedImages.Count} images in memory", LogLevel.DEVD);
         }
 
-        public async Task SubmitImages()
+        public async Task ZipImages()
         {
-            if (collectedImages.Count <= 0)
+            if (CollectedImages.Count <= 0)
             {
                 CancelTask($"No images collected", LogLevel.DEVD);
                 return;
             }
 
-            List<ImageManifestEntry> manifest = collectedImages
+            List<ImageManifestEntry> manifest = CollectedImages
                 .Select(img => new ImageManifestEntry
                 {
                     Guid = img.Guid,
@@ -800,94 +850,97 @@ namespace AssetDatabaseContributor.Systems
                 return;
             }
 
-            // Phase 2: build a self-contained zip — manifest.json describes exactly
-            // what's inside, so the server needs nothing remembered from phase 1.
             HashSet<string> neededSet = neededGuids.ToHashSet();
-            List<CollectedImage> toSend = collectedImages
+            List<CollectedImage> toSend = CollectedImages
                 .Where(img => neededSet.Contains(img.Guid))
                 .ToList();
 
-            List<ImageManifestEntry> zipManifest = toSend
-                .Select(img => new ImageManifestEntry
+            const long MaxZipSize = 25L * 1024 * 1024;
+            List<CollectedImage> sortedImages = toSend.OrderBy(i => i.Size).ToList();
+
+            List<List<CollectedImage>> batches = new();
+            List<CollectedImage> currentBatch = new();
+            long currentSize = 0;
+
+            foreach (CollectedImage image in sortedImages)
+            {
+                if (currentBatch.Count == 0)
                 {
-                    Guid = img.Guid,
-                    Extension = img.Extension,
-                    Hash = img.Hash,
-                    Size = img.Size,
-                })
-                .ToList();
+                    currentBatch.Add(image);
+                    currentSize = image.Size;
+                    continue;
+                }
+
+                if (currentSize + image.Size <= MaxZipSize)
+                {
+                    currentBatch.Add(image);
+                    currentSize += image.Size;
+                }
+                else
+                {
+                    batches.Add(currentBatch);
+
+                    currentBatch = new List<CollectedImage> { image };
+                    currentSize = image.Size;
+                }
+            }
+
+            if (currentBatch.Count > 0)
+                batches.Add(currentBatch);
+
+            int zipIndex = 1;
 
             string baseDirectory = $"{Mod.DataDir}\\~Extracted";
             Directory.CreateDirectory(baseDirectory);
+
             string timeNow = $"{DateTime.UtcNow:yyyy-MM-dd-HH-mm-ss}";
-            string zipName = $"~ADC_{timeNow}_images.zip";
-            string zipPath = Path.Combine(baseDirectory, zipName);
 
-            try
+            foreach (List<CollectedImage> batch in batches)
             {
-                using ZipArchive archive = ZipFile.Open(zipPath, ZipArchiveMode.Update);
+                string zipName = $"~ADC_{timeNow}_images_{zipIndex}.zip";
+                string zipPath = Path.Combine(baseDirectory, zipName);
 
-                ZipArchiveEntry manifestEntry = archive.CreateEntry(
-                    "manifest.json",
-                    CompressionLevel.Optimal
-                );
+                List<ImageManifestEntry> zipManifest = batch
+                    .Select(img => new ImageManifestEntry
+                    {
+                        Guid = img.Guid,
+                        Extension = img.Extension,
+                        Hash = img.Hash,
+                        Size = img.Size,
+                    })
+                    .ToList();
 
-                using (StreamWriter writer = new(manifestEntry.Open(), new UTF8Encoding(false)))
+                try
                 {
-                    writer.Write(JsonConvert.SerializeObject(zipManifest));
-                }
+                    using ZipArchive archive = ZipFile.Open(zipPath, ZipArchiveMode.Update);
 
-                foreach (CollectedImage img in toSend)
-                {
-                    archive.CreateEntryFromFile(
-                        img.FilePath,
-                        $"{img.Guid}{img.Extension}",
+                    ZipArchiveEntry manifestEntry = archive.CreateEntry(
+                        "manifest.json",
                         CompressionLevel.Optimal
                     );
+
+                    using (StreamWriter writer = new(manifestEntry.Open(), new UTF8Encoding(false)))
+                    {
+                        writer.Write(JsonConvert.SerializeObject(zipManifest));
+                    }
+
+                    foreach (CollectedImage img in batch)
+                    {
+                        archive.CreateEntryFromFile(
+                            img.FilePath,
+                            $"{img.Guid}{img.Extension}",
+                            CompressionLevel.NoCompression
+                        );
+                    }
+
+                    LogHelper.SendLog($"Wrote {toSend.Count} images to '{zipName}'", LogLevel.DEVD);
                 }
-
-                LogHelper.SendLog($"Wrote {toSend.Count} images to '{zipName}'", LogLevel.DEVD);
-            }
-            catch (Exception e)
-            {
-                CancelTask($"Failed to write image zip: {e.Message}");
-                return;
-            }
-
-            try
-            {
-                MultipartFormDataContent content = new();
-                byte[]? zipBytes = await File.ReadAllBytesAsync(zipPath);
-                ByteArrayContent fileContent = new(zipBytes);
-                fileContent.Headers.ContentType = new MediaTypeHeaderValue("application/zip");
-                content.Add(fileContent, "zip", Path.GetFileName(zipPath));
-
-                using HttpRequestMessage? uploadRequest = new(
-                    HttpMethod.Post,
-                    $"{ApiBase}/cs2db/submit"
-                );
-                uploadRequest.Content = content;
-                uploadRequest.Headers.Add("X-Api-Key", ApiKeyLocal.Value);
-
-                HttpResponseMessage? uploadResponse = await Http.SendAsync(uploadRequest);
-
-                if (!uploadResponse.IsSuccessStatusCode)
+                catch (Exception e)
                 {
-                    CancelTask(
-                        $"Failed to upload image zip {zipName}. UploadResponse: {uploadResponse.StatusCode}"
-                    );
+                    CancelTask($"Failed to write image zip: {e.Message}");
                     return;
                 }
-
-                LogHelper.SendLog(
-                    $"Image zip upload status: {uploadResponse.StatusCode}",
-                    LogLevel.DEVD
-                );
-            }
-            catch (Exception e)
-            {
-                CancelTask($"Image zip upload failed: {e.Message}");
-                return;
+                zipIndex++;
             }
         }
 
@@ -913,7 +966,7 @@ namespace AssetDatabaseContributor.Systems
             }
         }
 
-        internal static void CancelTask(string log = null, LogLevel logLevel = LogLevel.Info)
+        internal void CancelTask(string log = null, LogLevel logLevel = LogLevel.Info)
         {
             Cancelled = true;
             NotificationSystem.Pop(
@@ -934,9 +987,17 @@ namespace AssetDatabaseContributor.Systems
             }
             Disabled = true;
             TaskRunning = false;
+            if (stopwatch != null && stopwatch.IsRunning)
+            {
+                stopwatch.Stop();
+                LogHelper.SendLog($"Cancelled after {stopwatch.Elapsed}");
+            }
         }
 
-        internal static async Task<HashSet<string>> ValidateModFoldersAsync(List<string> packages)
+        internal static async Task<HashSet<string>> ValidateModFoldersAsync(
+            List<string> packages,
+            int validableMax
+        )
         {
             string[]? roots = ModHelper.GetPDXModsPath().Where(Directory.Exists).ToArray();
 
@@ -1014,7 +1075,7 @@ namespace AssetDatabaseContributor.Systems
                     {
                         LogHelper.SendLog($"{modFolder} is valid", LogLevel.DEVD);
                         validPackages.Add(modFolder);
-                        if (validPackages.Count >= Mod.m_Setting.PackCount)
+                        if (validPackages.Count >= validableMax)
                         {
                             return validPackages;
                         }
