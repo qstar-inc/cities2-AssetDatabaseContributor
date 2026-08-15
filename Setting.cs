@@ -18,6 +18,7 @@ namespace AssetDatabaseContributor
             ContribEnabled = false;
             PackCount = 10;
             Cooldown = 60;
+            TaskDelay = 5;
             AskedForConsent = false;
             ConsentForContribution = false;
             ConsentForUsernameShare = false;
@@ -51,6 +52,25 @@ namespace AssetDatabaseContributor
         )]
         [SettingsUISection(GeneralTab, GeneralGroup)]
         public int Cooldown { get; set; } = 60;
+
+        [SettingsUISlider(
+            max = Constants.DelayMax,
+            min = Constants.DelayMin,
+            step = 10,
+            unit = Unit.kInteger
+        )]
+        [SettingsUISection(GeneralTab, GeneralGroup)]
+        public int TaskDelay { get; set; } = 5;
+
+        bool InGameOrEditor => WorldHelper.IsGameOrEditor;
+
+        [SettingsUIButton]
+        [SettingsUISection(GeneralTab, GeneralGroup)]
+        [SettingsUIDisableByCondition(typeof(Setting), nameof(InGameOrEditor))]
+        public bool RunNow
+        {
+            set { WorldHelper.GetSystem<StartupSystem>().Start(); }
+        }
 
         [SettingsUIButton]
         [SettingsUISection(GeneralTab, GeneralGroup)]

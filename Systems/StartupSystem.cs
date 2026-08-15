@@ -15,6 +15,7 @@ using System.Threading.Tasks;
 using Colossal.IO.AssetDatabase;
 using Colossal.Json;
 using Colossal.PSI.Common;
+using Colossal.Serialization.Entities;
 using Game;
 using Game.PSI;
 using Game.SceneFlow;
@@ -34,7 +35,8 @@ namespace AssetDatabaseContributor.Systems
         public static string notifIdentifier = $"{Mod.Id}.Notif";
         private static bool FirstMethodRan = false;
         private static bool TaskRunning = false;
-        private static bool Disabled = false;
+        private static bool DisabledTemporarily = false;
+        private static bool DisabledForSession = false;
         private static bool Cancelled = false;
 
 #if DEBUG
@@ -44,6 +46,8 @@ namespace AssetDatabaseContributor.Systems
 #endif
 
         private static long lastServerTime = 0;
+        private DateTime nextRunTime = DateTime.MinValue;
+
         private static readonly HashSet<SourceDataRow> AllSources = new();
 
         private static ExecutableAsset? SMC = null;
@@ -62,6 +66,30 @@ namespace AssetDatabaseContributor.Systems
 
         protected override void OnUpdate() { }
 
+        protected override void OnGameLoadingComplete(Purpose purpose, GameMode mode)
+        {
+            base.OnGameLoadingComplete(purpose, mode);
+            if (!FirstMethodRan || TaskRunning || DisabledForSession)
+                return;
+
+            if (WorldHelper.IsGameOrEditor && !DisabledForSession)
+            {
+                DisabledForSession = true;
+                LogHelper.SendLog("Disabling checking while game/editor is active");
+                return;
+            }
+
+            if (!WorldHelper.IsGameOrEditor)
+            {
+                DisabledForSession = false;
+            }
+
+            if (DisabledForSession)
+                return;
+
+            Colossal.Core.MainThreadDispatcher.RegisterUpdater(DispatchOnMain);
+        }
+
         private static readonly HttpClient Http = new();
 
         private bool FirstRunMethod()
@@ -77,7 +105,7 @@ namespace AssetDatabaseContributor.Systems
             )
                 return false;
             FirstMethodRan = true;
-            InitStarter();
+            Start();
             return true;
         }
 
@@ -122,7 +150,7 @@ namespace AssetDatabaseContributor.Systems
             return packages;
         }
 
-        public void InitStarter()
+        public void Start()
         {
             Cancelled = false;
             NotificationSystem.Push(
@@ -132,24 +160,24 @@ namespace AssetDatabaseContributor.Systems
                 progressState: ProgressState.Indeterminate
             );
 
-            if (TaskRunning || Disabled)
+            if (TaskRunning || DisabledForSession)
                 return;
 
             if (!ModHelper.IsOnPublicBuild())
             {
-                CancelTask("Steam build is not the public build");
+                CancelTask(true, "Steam build is not the public build");
                 return;
             }
 
             if (!ModHelper.IsModActive("SimpleModCheckerPlus"))
             {
-                CancelTask("Required mod Simple Mod Checker is missing");
+                CancelTask(true, "Required mod Simple Mod Checker is missing");
                 return;
             }
 
             if (Mod.m_Setting.AskedForConsent && !Mod.m_Setting.ContribEnabled)
             {
-                CancelTask("Contribution is disabled");
+                CancelTask(true, "Contribution is disabled");
                 return;
             }
 
@@ -158,15 +186,41 @@ namespace AssetDatabaseContributor.Systems
 
         public async void DispatchOnMain()
         {
+            if (DisabledForSession)
+                return;
+
+            nextRunTime = DateTime.Now.AddMinutes(
+                Math.Clamp(Mod.m_Setting.Cooldown, Constants.CooldownMin, Constants.CooldownMax)
+            );
+
+            if (TaskRunning || DisabledTemporarily)
+            {
+                Colossal.Core.MainThreadDispatcher.RegisterUpdater(DispatchOnMain);
+                return;
+            }
+
+            if (DateTime.Now < nextRunTime)
+            {
+                Colossal.Core.MainThreadDispatcher.RegisterUpdater(DispatchOnMain);
+                LogHelper.SendLog($"Queuing for next run in {nextRunTime}");
+                return;
+            }
+
+            lastServerTime = 0;
+            Cancelled = false;
+
             try
             {
-                await Task.Delay(5000);
+                await Task.Delay(
+                    Math.Clamp(Mod.m_Setting.TaskDelay, Constants.DelayMin, Constants.DelayMax)
+                        * 1000
+                );
                 await ModHelper.CacheLoggedInUserName();
                 Username = ModHelper.UserName;
 
                 if (string.IsNullOrEmpty(Username))
                 {
-                    CancelTask($"Unable to retrieve user data");
+                    CancelTask(true, "Unable to retrieve user data");
                     return;
                 }
 
@@ -215,13 +269,13 @@ namespace AssetDatabaseContributor.Systems
 
                 if (!FindSMC())
                 {
-                    CancelTask($"SMC assembly not found? How?");
+                    CancelTask(true, "SMC assembly not found? How?");
                     return;
                 }
 
                 if (Mod.m_Setting.AskedForConsent && !Mod.m_Setting.ConsentForContribution)
                 {
-                    CancelTask($"User did not consent for contribution");
+                    CancelTask(true, "User did not consent for contribution");
                     return;
                 }
 
@@ -265,14 +319,24 @@ namespace AssetDatabaseContributor.Systems
                     LogLevel.DEVD
                 );
 
+                var modsSent = ModsAdded.Except(ModsToReject).ToList();
+
                 LogHelper.SendLog(
-                    $"Successfully contributed with {ModsAdded.Count} mod data: {string.Join(", ", ModsAdded)}"
+                    $"Successfully contributed with {modsSent.Count} mod data: {string.Join(", ", modsSent)}"
                 );
 
                 if (stopwatch.IsRunning)
                 {
                     stopwatch.Stop();
                     LogHelper.SendLog($"Done in {stopwatch.Elapsed}");
+
+                    if (!DisabledForSession)
+                    {
+                        Colossal.Core.MainThreadDispatcher.RegisterUpdater(DispatchOnMain);
+                        LogHelper.SendLog(
+                            $"Queuing for next run in {StringHelper.FormatTime(nextRunTime.Second, "")}"
+                        );
+                    }
                 }
             }
             catch (Exception ex)
@@ -387,16 +451,13 @@ namespace AssetDatabaseContributor.Systems
         public async Task GetExtractData()
         {
             AllSources.Clear();
-            int secDiff =
-                Math.Clamp(Mod.m_Setting.Cooldown, Constants.CooldownMin, Constants.CooldownMax)
-                * 0
-                * 60; //in seconds
+            int secDiff = 5 * 60; //5 mins in seconds
 #if DEBUG
             secDiff = 0;
 #endif
 
             LogHelper.SendLog("Starting GetExtractData", LogLevel.DEVD);
-            if (TaskRunning || Disabled)
+            if (TaskRunning || DisabledForSession)
                 return;
 
             TaskRunning = true;
@@ -424,10 +485,15 @@ namespace AssetDatabaseContributor.Systems
                         string ageText = $"SourceData is {StringHelper.FormatTime(age)}.";
                         if (age < secDiff)
                         {
-                            CancelTask(ageText);
+                            CancelTask(false, ageText);
                             return;
                         }
-                        LogHelper.SendLog(ageText);
+
+                        if (cache.ServerTime == 0)
+                            LogHelper.SendLog("SourceData time is 0, redownloading...");
+                        else
+                            LogHelper.SendLog(ageText);
+
                         since = cache.ServerTime.ToString();
                     }
                 }
@@ -463,25 +529,25 @@ namespace AssetDatabaseContributor.Systems
                     && webEx.Status == WebExceptionStatus.ConnectFailure
                 )
                 {
-                    CancelTask("Connection to the server failed");
+                    CancelTask(false, "Connection to the server failed");
                 }
                 else
                 {
                     LogHelper.SendLog(ex, LogLevel.Info);
-                    CancelTask("Unknown error occured");
+                    CancelTask(false, "Unknown error occured");
                 }
                 return;
             }
             catch (Exception ex)
             {
-                CancelTask(ex.ToString());
+                CancelTask(false, ex.ToString());
                 return;
             }
 
             var body = await response.Content.ReadAsStringAsync();
             if (!response.IsSuccessStatusCode)
             {
-                CancelTask($"Response failed: {body}");
+                CancelTask(false, $"Response failed: {body}");
                 return;
             }
 
@@ -494,7 +560,7 @@ namespace AssetDatabaseContributor.Systems
             }
             catch (Exception ex)
             {
-                CancelTask(ex.ToString());
+                CancelTask(false, ex.ToString());
                 return;
             }
 
@@ -533,7 +599,7 @@ namespace AssetDatabaseContributor.Systems
 
             if (packagesToValidate.Count <= 0)
             {
-                CancelTask($"No unknown mods found to be scanned");
+                CancelTask(false, "No packages found to be validated");
                 return;
             }
 
@@ -559,12 +625,12 @@ namespace AssetDatabaseContributor.Systems
 
             if (modsToCheck.Count <= 0)
             {
-                CancelTask($"No verified mods found to be scanned");
+                CancelTask(false, "No verified mods found to be scanned");
                 return;
             }
 
             LogHelper.SendLog(
-                $"Starting scan for {modsToCheck.Count} {string.Join(", ", modsToCheck)}"
+                $"Starting scan for {modsToCheck.Count} mods: {string.Join(", ", modsToCheck)}"
             );
 
             NotificationSystem.Push(
@@ -603,14 +669,14 @@ namespace AssetDatabaseContributor.Systems
 
                 if (ModsToCheck.Count <= 0)
                 {
-                    CancelTask($"No mods selected to check", LogLevel.DEVD);
+                    CancelTask(false, "No mods selected to check");
                     return;
                 }
                 WorldHelper.GetSystem<ExtractionSystem>().ExtractPrefabs(Limits.Mod);
             }
             catch (Exception ex)
             {
-                CancelTask(ex.ToString());
+                CancelTask(false, ex.ToString());
                 return;
             }
         }
@@ -638,14 +704,14 @@ namespace AssetDatabaseContributor.Systems
             LogHelper.SendLog("Starting SubmitZips", LogLevel.DEVD);
             if (!Directory.Exists($"{Mod.DataDir}\\~Extracted"))
             {
-                CancelTask("Extracted folder doesn't exist", LogLevel.DEVD);
+                CancelTask(false, "Extracted folder doesn't exist", LogLevel.DEVD);
                 return;
             }
 
             string[] newZips = Directory.GetFiles($"{Mod.DataDir}\\~Extracted");
             if (newZips.Length <= 0)
             {
-                CancelTask("No zips present", LogLevel.DEVD);
+                CancelTask(false, "No zips present");
                 return;
             }
 
@@ -676,10 +742,10 @@ namespace AssetDatabaseContributor.Systems
                     switch (uploadResponse.StatusCode)
                     {
                         case System.Net.HttpStatusCode.BadRequest:
-                            CancelTask("Bad request sent");
+                            CancelTask(false, "Bad request sent");
                             return;
                         case System.Net.HttpStatusCode.Unauthorized:
-                            CancelTask("Unauthorized request sent");
+                            CancelTask(false, "Unauthorized request sent");
                             return;
                         default:
                             break;
@@ -726,10 +792,10 @@ namespace AssetDatabaseContributor.Systems
                         switch (uploadResponse.StatusCode)
                         {
                             case System.Net.HttpStatusCode.BadRequest:
-                                CancelTask("Bad request sent");
+                                CancelTask(false, "Bad request sent");
                                 return;
                             case System.Net.HttpStatusCode.Unauthorized:
-                                CancelTask("Unauthorized request sent");
+                                CancelTask(false, "Unauthorized request sent");
                                 return;
                             default:
                                 break;
@@ -753,7 +819,7 @@ namespace AssetDatabaseContributor.Systems
         {
             if (ImagesNeeded.Count <= 0)
             {
-                CancelTask($"No images to collect", LogLevel.DEVD);
+                LogHelper.SendLog($"No images to collect", LogLevel.DEVD);
                 return;
             }
 
@@ -820,7 +886,7 @@ namespace AssetDatabaseContributor.Systems
         {
             if (CollectedImages.Count <= 0)
             {
-                CancelTask($"No images collected", LogLevel.DEVD);
+                LogHelper.SendLog("No images collected", LogLevel.DEVD);
                 return;
             }
 
@@ -854,7 +920,7 @@ namespace AssetDatabaseContributor.Systems
 
                 if (!response.IsSuccessStatusCode)
                 {
-                    CancelTask($"Image manifest check rejected: {response.StatusCode}");
+                    CancelTask(false, $"Image manifest check rejected: {response.StatusCode}");
                     return;
                 }
 
@@ -865,13 +931,13 @@ namespace AssetDatabaseContributor.Systems
             }
             catch (Exception e)
             {
-                CancelTask($"Image manifest check failed: {e.Message}");
+                CancelTask(false, $"Image manifest check failed: {e.Message}");
                 return;
             }
 
             if (neededGuids.Count == 0)
             {
-                CancelTask("Server has no new/changed images to receive.", LogLevel.DEVD);
+                LogHelper.SendLog("Server has no new/changed images to receive.", LogLevel.DEVD);
                 return;
             }
 
@@ -962,7 +1028,7 @@ namespace AssetDatabaseContributor.Systems
                 }
                 catch (Exception e)
                 {
-                    CancelTask($"Failed to write image zip: {e.Message}");
+                    CancelTask(false, $"Failed to write image zip: {e.Message}");
                     return;
                 }
                 zipIndex++;
@@ -991,7 +1057,11 @@ namespace AssetDatabaseContributor.Systems
             }
         }
 
-        internal void CancelTask(string log = null, LogLevel logLevel = LogLevel.Info)
+        internal void CancelTask(
+            bool disabled = false,
+            string log = null,
+            LogLevel logLevel = LogLevel.Info
+        )
         {
             Cancelled = true;
             NotificationSystem.Pop(
@@ -1010,12 +1080,17 @@ namespace AssetDatabaseContributor.Systems
             {
                 LogHelper.SendLog($"{log.TrimEnd('.')}. Cancelling...", logLevel);
             }
-            Disabled = true;
+            DisabledForSession = disabled;
             TaskRunning = false;
             if (stopwatch != null && stopwatch.IsRunning)
             {
                 stopwatch.Stop();
                 LogHelper.SendLog($"Cancelled after {stopwatch.Elapsed}");
+            }
+            if (!DisabledForSession)
+            {
+                Colossal.Core.MainThreadDispatcher.RegisterUpdater(DispatchOnMain);
+                LogHelper.SendLog($"Queuing for next run in {nextRunTime}");
             }
         }
 
@@ -1205,6 +1280,8 @@ namespace AssetDatabaseContributor.Systems
             SourceDataCache newCache = new() { ServerTime = 0, Rows = new List<SourceDataRow>() };
 
             File.WriteAllText(SourceDataPath, JsonConvert.SerializeObject(newCache));
+
+            LogHelper.SendLog("Cleanup successful");
         }
     }
 }

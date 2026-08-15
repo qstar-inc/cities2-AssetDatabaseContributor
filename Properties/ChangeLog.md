@@ -1,2 +1,4 @@
-- Add strict component check.
-- Any mods containing foreign components will be rejected.
+- Add periodic check, the mod will now retry checks unless there's a fatal issue.
+- Periodic checks are controlled by the existing "Cooldown" option.
+- Periodic checks are disabled when in a map (Save or Editor).
+- Add option button to trigger checkup manually.

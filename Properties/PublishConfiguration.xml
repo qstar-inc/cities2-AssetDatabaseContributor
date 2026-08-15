@@ -42,15 +42,17 @@ Nothing else is accessed by this mod.
 - Only uploads asset-related information.
 - User identity is optional.
 - Consent can be revoked from the Options UI.
-- Uploads happen in the background only once per session soon after on game startup.</LongDescription>
+- Uploads happen in the background only when not in a map (Save or Editor).</LongDescription>
   <Thumbnail Value="Properties/Thumbnail.png" />
   <Screenshot Value="" />
   <Tag Value="Code Mod" />
   <ForumLink Value="https://forum.paradoxplaza.com/forum/threads/starq-mods-assets-projects-megathread.1930389/" />
-  <ModVersion Value="1.0.7" />
+  <ModVersion Value="1.0.8" />
   <GameVersion Value="1.6.0*" />
-  <ChangeLog>- Add strict component check.
-- Any mods containing foreign components will be rejected.</ChangeLog>
+  <ChangeLog>- Add periodic check, the mod will retry.
+- Periodic checks are controlled by the existing "Cooldown" option.
+- Periodic checks are disabled when in a map (Save or Editor).
+- Add option button to trigger checkup manually.</ChangeLog>
   <ExternalLink Type="github" Url="https://github.com/qstar-inc/cities2-AssetDatabaseContributor" />
   <ExternalLink Type="discord" Url="https://discord.gg/U2PSjUzUuF" />
   <ExternalLink Type="buymeacoffee" Url="https://buymeacoffee.com/starq" />
