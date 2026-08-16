@@ -74,17 +74,18 @@ namespace AssetDatabaseContributor.Systems
 
             if (WorldHelper.IsGameOrEditor && !DisabledForSession)
             {
-                DisabledForSession = true;
+                NotificationSystem.Pop(notifIdentifier);
+                DisabledTemporarily = true;
                 LogHelper.SendLog("Disabling checking while game/editor is active");
                 return;
             }
 
             if (!WorldHelper.IsGameOrEditor)
             {
-                DisabledForSession = false;
+                DisabledTemporarily = false;
             }
 
-            if (DisabledForSession)
+            if (DisabledTemporarily)
                 return;
 
             Colossal.Core.MainThreadDispatcher.RegisterUpdater(DispatchOnMain);
@@ -152,6 +153,7 @@ namespace AssetDatabaseContributor.Systems
 
         public void Start()
         {
+            nextRunTime = DateTime.MinValue;
             Cancelled = false;
             NotificationSystem.Push(
                 notifIdentifier,
@@ -189,10 +191,6 @@ namespace AssetDatabaseContributor.Systems
             if (DisabledForSession)
                 return;
 
-            nextRunTime = DateTime.Now.AddMinutes(
-                Math.Clamp(Mod.m_Setting.Cooldown, Constants.CooldownMin, Constants.CooldownMax)
-            );
-
             if (TaskRunning || DisabledTemporarily)
             {
                 Colossal.Core.MainThreadDispatcher.RegisterUpdater(DispatchOnMain);
@@ -202,7 +200,6 @@ namespace AssetDatabaseContributor.Systems
             if (DateTime.Now < nextRunTime)
             {
                 Colossal.Core.MainThreadDispatcher.RegisterUpdater(DispatchOnMain);
-                LogHelper.SendLog($"Queuing for next run in {nextRunTime}");
                 return;
             }
 
@@ -329,19 +326,23 @@ namespace AssetDatabaseContributor.Systems
                 {
                     stopwatch.Stop();
                     LogHelper.SendLog($"Done in {stopwatch.Elapsed}");
-
-                    if (!DisabledForSession)
-                    {
-                        Colossal.Core.MainThreadDispatcher.RegisterUpdater(DispatchOnMain);
-                        LogHelper.SendLog(
-                            $"Queuing for next run in {StringHelper.FormatTime(nextRunTime.Second, "")}"
-                        );
-                    }
                 }
             }
             catch (Exception ex)
             {
                 LogHelper.SendLog($"Something went wrong: {ex.Message}", LogLevel.Error);
+            }
+
+            nextRunTime = DateTime.Now.AddMinutes(
+                Math.Clamp(Mod.m_Setting.Cooldown, Constants.CooldownMin, Constants.CooldownMax)
+            );
+
+            if (!DisabledForSession)
+            {
+                Colossal.Core.MainThreadDispatcher.RegisterUpdater(DispatchOnMain);
+                LogHelper.SendLog(
+                    $"Queuing for next run in {StringHelper.FormatTime(nextRunTime.Second, "")}"
+                );
             }
 
             TaskRunning = false;
@@ -1090,7 +1091,6 @@ namespace AssetDatabaseContributor.Systems
             if (!DisabledForSession)
             {
                 Colossal.Core.MainThreadDispatcher.RegisterUpdater(DispatchOnMain);
-                LogHelper.SendLog($"Queuing for next run in {nextRunTime}");
             }
         }
 

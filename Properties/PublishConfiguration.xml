@@ -47,12 +47,9 @@ Nothing else is accessed by this mod.
   <Screenshot Value="" />
   <Tag Value="Code Mod" />
   <ForumLink Value="https://forum.paradoxplaza.com/forum/threads/starq-mods-assets-projects-megathread.1930389/" />
-  <ModVersion Value="1.0.8" />
+  <ModVersion Value="1.0.9" />
   <GameVersion Value="1.6.0*" />
-  <ChangeLog>- Add periodic check, the mod will retry.
-- Periodic checks are controlled by the existing "Cooldown" option.
-- Periodic checks are disabled when in a map (Save or Editor).
-- Add option button to trigger checkup manually.</ChangeLog>
+  <ChangeLog>- Fix periodic check retriggering continuously.</ChangeLog>
   <ExternalLink Type="github" Url="https://github.com/qstar-inc/cities2-AssetDatabaseContributor" />
   <ExternalLink Type="discord" Url="https://discord.gg/U2PSjUzUuF" />
   <ExternalLink Type="buymeacoffee" Url="https://buymeacoffee.com/starq" />
