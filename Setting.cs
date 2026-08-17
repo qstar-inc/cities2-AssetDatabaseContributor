@@ -64,13 +64,13 @@ namespace AssetDatabaseContributor
 
         bool InGameOrEditor => WorldHelper.IsGameOrEditor;
 
-        [SettingsUIButton]
-        [SettingsUISection(GeneralTab, GeneralGroup)]
-        [SettingsUIDisableByCondition(typeof(Setting), nameof(InGameOrEditor))]
-        public bool RunNow
-        {
-            set { WorldHelper.GetSystem<StartupSystem>().Start(); }
-        }
+        //[SettingsUIButton]
+        //[SettingsUISection(GeneralTab, GeneralGroup)]
+        //[SettingsUIDisableByCondition(typeof(Setting), nameof(InGameOrEditor))]
+        //public bool RunNow
+        //{
+        //    set { WorldHelper.GetSystem<StartupSystem>().Start(); }
+        //}
 
         [SettingsUIButton]
         [SettingsUISection(GeneralTab, GeneralGroup)]

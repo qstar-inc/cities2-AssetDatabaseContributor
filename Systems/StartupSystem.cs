@@ -52,6 +52,7 @@ namespace AssetDatabaseContributor.Systems
 
         private static ExecutableAsset? SMC = null;
         private static Dictionary<string, LoadedModInfo> LoadedPackagesFromSMC = new();
+        private static HashSet<string> FailedPackages = new();
 
         private static string Username = string.Empty;
         private const string ApiBase = ApiKeyLocal.Web;
@@ -75,14 +76,16 @@ namespace AssetDatabaseContributor.Systems
             if (WorldHelper.IsGameOrEditor && !DisabledForSession)
             {
                 NotificationSystem.Pop(notifIdentifier);
-                DisabledTemporarily = true;
-                LogHelper.SendLog("Disabling checking while game/editor is active");
+                //DisabledTemporarily = true;
+                DisabledForSession = true;
+                LogHelper.SendLog("Disabling all subsequent checking during this session");
                 return;
             }
 
             if (!WorldHelper.IsGameOrEditor)
             {
-                DisabledTemporarily = false;
+                //DisabledTemporarily = false
+                return;
             }
 
             if (DisabledTemporarily)
@@ -105,8 +108,8 @@ namespace AssetDatabaseContributor.Systems
                 || GameManager.instance.state == GameManager.State.Booting
             )
                 return false;
-            FirstMethodRan = true;
             Start();
+            FirstMethodRan = true;
             return true;
         }
 
@@ -188,6 +191,13 @@ namespace AssetDatabaseContributor.Systems
 
         public async void DispatchOnMain()
         {
+            if (FirstMethodRan)
+                await Task.Delay(60000);
+
+            await Task.Delay(
+                Math.Clamp(Mod.m_Setting.TaskDelay, Constants.DelayMin, Constants.DelayMax) * 1000
+            );
+
             if (DisabledForSession)
                 return;
 
@@ -208,72 +218,71 @@ namespace AssetDatabaseContributor.Systems
 
             try
             {
-                await Task.Delay(
-                    Math.Clamp(Mod.m_Setting.TaskDelay, Constants.DelayMin, Constants.DelayMax)
-                        * 1000
-                );
-                await ModHelper.CacheLoggedInUserName();
-                Username = ModHelper.UserName;
-
                 if (string.IsNullOrEmpty(Username))
                 {
-                    CancelTask(true, "Unable to retrieve user data");
-                    return;
-                }
+                    await ModHelper.CacheLoggedInUserName();
+                    Username = ModHelper.UserName;
 
-                if (!Mod.m_Setting.AskedForConsent)
-                {
-                    LocaleHelper.AddLocalization(
-                        $"{Mod.Id}.UsernameConsentText2",
-                        LocaleHelper
-                            .Translate($"{Mod.Id}.UsernameConsentText")
-                            .Replace("{username}", Username)
-                    );
-                    LocaleHelper.FlushLocalizationQueue();
-
-                    int d1 = await DialogHelper.ShowConfirmationDialogAndWait(
-                        Mod.Name,
-                        $"{Mod.Id}.GeneralConsentText",
-                        "Paradox.CONSENT",
-                        "Common.NO",
-                        null
-                    );
-                    if (d1 == 0)
+                    if (string.IsNullOrEmpty(Username))
                     {
-                        Mod.m_Setting.ContribEnabled = true;
-                        Mod.m_Setting.ConsentForContribution = true;
-                        int d2 = await DialogHelper.ShowConfirmationDialogAndWait(
-                            Mod.Name,
+                        CancelTask(true, "Unable to retrieve user data");
+                        return;
+                    }
+
+                    if (!Mod.m_Setting.AskedForConsent)
+                    {
+                        LocaleHelper.AddLocalization(
                             $"{Mod.Id}.UsernameConsentText2",
+                            LocaleHelper
+                                .Translate($"{Mod.Id}.UsernameConsentText")
+                                .Replace("{username}", Username)
+                        );
+                        LocaleHelper.FlushLocalizationQueue();
+
+                        int d1 = await DialogHelper.ShowConfirmationDialogAndWait(
+                            Mod.Name,
+                            $"{Mod.Id}.GeneralConsentText",
                             "Paradox.CONSENT",
                             "Common.NO",
                             null
                         );
+                        if (d1 == 0)
+                        {
+                            Mod.m_Setting.ContribEnabled = true;
+                            Mod.m_Setting.ConsentForContribution = true;
+                            int d2 = await DialogHelper.ShowConfirmationDialogAndWait(
+                                Mod.Name,
+                                $"{Mod.Id}.UsernameConsentText2",
+                                "Paradox.CONSENT",
+                                "Common.NO",
+                                null
+                            );
 
-                        if (d2 == 0)
-                            Mod.m_Setting.ConsentForUsernameShare = true;
+                            if (d2 == 0)
+                                Mod.m_Setting.ConsentForUsernameShare = true;
+                            else
+                                Mod.m_Setting.ConsentForUsernameShare = false;
+                        }
                         else
+                        {
+                            Mod.m_Setting.ConsentForContribution = false;
                             Mod.m_Setting.ConsentForUsernameShare = false;
+                        }
+
+                        Mod.m_Setting.AskedForConsent = true;
                     }
-                    else
+
+                    if (!FindSMC())
                     {
-                        Mod.m_Setting.ConsentForContribution = false;
-                        Mod.m_Setting.ConsentForUsernameShare = false;
+                        CancelTask(true, "SMC assembly not found? How?");
+                        return;
                     }
 
-                    Mod.m_Setting.AskedForConsent = true;
-                }
-
-                if (!FindSMC())
-                {
-                    CancelTask(true, "SMC assembly not found? How?");
-                    return;
-                }
-
-                if (Mod.m_Setting.AskedForConsent && !Mod.m_Setting.ConsentForContribution)
-                {
-                    CancelTask(true, "User did not consent for contribution");
-                    return;
+                    if (Mod.m_Setting.AskedForConsent && !Mod.m_Setting.ConsentForContribution)
+                    {
+                        CancelTask(true, "User did not consent for contribution");
+                        return;
+                    }
                 }
 
                 stopwatch = Stopwatch.StartNew();
@@ -595,6 +604,7 @@ namespace AssetDatabaseContributor.Systems
             Random rng = new();
             List<string> packagesToValidate = packages
                 .Except(knownModKeys)
+                .Except(FailedPackages)
                 .OrderBy(_ => rng.Next())
                 .ToList();
 
@@ -1181,6 +1191,7 @@ namespace AssetDatabaseContributor.Systems
                         }
                         continue;
                     }
+                    FailedPackages.Add(modFolder);
                     LogHelper.SendLog($"{modFolder} failed to be verified");
                 }
             }

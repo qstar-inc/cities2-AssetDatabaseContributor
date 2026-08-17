@@ -38,4 +38,4 @@ Nothing else is accessed by this mod.
 - Only uploads asset-related information.
 - User identity is optional.
 - Consent can be revoked from the Options UI.
-- Uploads happen in the background only when not in a map (Save or Editor).
+- Uploads happen in the background only before opening a map in that session (Save or Editor).
