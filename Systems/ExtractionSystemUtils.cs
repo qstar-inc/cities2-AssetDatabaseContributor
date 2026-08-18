@@ -3,19 +3,41 @@ using System.IO;
 using System.IO.Compression;
 using System.Linq;
 using System.Reflection;
+using System.Text;
 using Colossal.IO.AssetDatabase;
+using Colossal.Logging;
+using Colossal.OdinSerializer;
 using Colossal.PSI.Common;
 using CSVFile;
 using Game;
 using Game.Prefabs;
 using StarQ.Shared.Extensions;
-using static Game.Rendering.Debug.RenderPrefabRenderer;
+using UnityEngine;
 
 namespace AssetDatabaseContributor.Systems
 {
     public partial class ExtractionSystem : GameSystemBase
     {
+        private static HashSet<(
+            int index,
+            string comp,
+            string attr,
+            string type,
+            string note
+        )> ComponentLib { get; set; } = new();
+
         private readonly Dictionary<string, string> dlcVersions = new();
+
+        internal static readonly HashSet<string> ImagesNeeded = new();
+
+        internal static HashSet<string> ModsToCheck = new();
+        internal static HashSet<string> ModsToReject = new();
+        internal static HashSet<string> ModsAdded = new();
+        public static List<string> ValidComponents = new();
+
+        public static FileSystemDataSource.PathEscapePolicy kPathEscapePolicy = new();
+
+        public static bool IsValidComponent(string typeName) => ValidComponents.Contains(typeName);
 
         private void GetDLCVersions()
         {
@@ -87,47 +109,15 @@ namespace AssetDatabaseContributor.Systems
             };
         }
 
-        private static HashSet<(
-            int index,
-            string comp,
-            string attr,
-            string type,
-            string note
-        )> ComponentLib { get; set; } = new();
-
-        //private HashSet<(
-        //    int index,
-        //    string comp,
-        //    string attr,
-        //    string type,
-        //    string note
-        //)> LoadExistingComponentLib()
         private void LoadExistingComponentLib()
         {
-            //if (CachedComponentAttributes.Count > 0)
-            //    return CachedComponentAttributes;
-
-            //var result =
-            //    new HashSet<(int index, string comp, string attr, string type, string note)>();
-
             Assembly? assembly = ModHelper.GetModExecutable(Mod.Id)?.assembly;
 
             if (assembly == null)
             {
                 LogHelper.SendLog("Something went wrong, could not find own assembly");
-                //return result;
                 return;
             }
-
-            //string path = Path.Combine(ModHelper.GetModPath(Mod.Instance), "components_attr.tsv");
-
-            //if (!File.Exists(path))
-            //    return result;
-
-            //if (File.ReadLines(path).Count() == 0)
-            //    return result;
-
-            //using CSVReader reader = new(new StreamReader(path), GetCSVSetting());
 
             using Stream resource = assembly.GetManifestResourceStream(
                 $"{Mod.Id}.EmbedCustom.components_attr.tsv.gz"
@@ -136,7 +126,6 @@ namespace AssetDatabaseContributor.Systems
             if (resource == null)
             {
                 LogHelper.SendLog("Something went wrong, could not find own embedded TSV");
-                //return result;
                 return;
             }
 
@@ -148,90 +137,48 @@ namespace AssetDatabaseContributor.Systems
             HashSet<string> validComps = new();
 
             foreach (ComponentAttributeRow row in rows)
-            {
-                //result.Add((row.index, row.comp_name, row.attr_name, row.attr_type, row.note));
                 validComps.Add(row.comp_name);
-            }
-
-            //CachedComponentAttributes = result;
 
             ValidComponents = validComps.ToList();
-
-            //return result;
         }
 
-        //public static new HashSet<(
-        //    int index,
-        //    string comp,
-        //    string attr,
-        //    string type,
-        //    string note
-        //)> CachedComponentAttributes = new();
+        public void TestPrefabs()
+        {
+            WorldHelper.PrefabSystem.TryGetPrefab(
+                new PrefabID(
+                    nameof(TrackPrefab),
+                    "W7Double Train Track - Station Middle",
+                    Colossal.Hash128.Parse("b1fe85b77295966146e41d9f6da6fe65")
+                ),
+                out PrefabBase pb
+            );
 
-        public static List<string> ValidComponents = new();
+            if (!PrefabHelper.TryGetOriginal(pb, out PrefabBase original))
+            {
+                LogHelper.SendLog("so is null");
+                return;
+            }
 
-        public static bool IsValidComponent(string typeName) => ValidComponents.Contains(typeName);
+            if (original.GetType() == pb.GetType())
+            {
+                if (pb.TryGet(out UIObject uio))
+                    LogHelper.SendLog($"UIO Icon is {uio.m_Icon}");
+                else
+                    LogHelper.SendLog($"No UIO Icon in pb");
+                if (original.TryGet(out UIObject uio2))
+                    LogHelper.SendLog($"UIO Icon is {uio2.m_Icon}");
+                else
+                    LogHelper.SendLog($"No UIO Icon in so");
+            }
 
-        //private void ValidateComponentLib()
-        //{
-        //    var existing = LoadExistingComponentLib();
-
-        //    var existingGroups = existing
-        //        .GroupBy(x => x.comp)
-        //        .ToDictionary(g => g.Key, g => g.ToHashSet());
-
-        //    var currentGroups = ComponentLib
-        //        .GroupBy(x => x.comp)
-        //        .ToDictionary(g => g.Key, g => g.ToHashSet());
-
-        //    var filtered =
-        //        new HashSet<(int index, string comp, string attr, string type, string note)>();
-
-        //    foreach (var (comp, currentRows) in currentGroups)
-        //    {
-        //        if (!existingGroups.TryGetValue(comp, out var existingRows))
-        //        {
-        //            LogHelper.SendLog(
-        //                $"Component '{comp}' is new and will be added to the component library."
-        //            );
-        //            filtered.UnionWith(currentRows);
-        //            continue;
-        //        }
-
-        //        if (!currentRows.SetEquals(existingRows))
-        //        {
-        //            var currentByAttr = currentRows.ToDictionary(r => r.attr);
-        //            var existingByAttr = existingRows.ToDictionary(r => r.attr);
-
-        //            foreach (var attr in currentByAttr.Keys.Intersect(existingByAttr.Keys))
-        //            {
-        //                var current = currentByAttr[attr];
-        //                var existin = existingByAttr[attr];
-
-        //                if (current.type != existin.type || current.note != existin.note)
-        //                {
-        //                    LogHelper.SendLog(
-        //                        $"Component '{comp}', attribute '{attr}' changed:\n"
-        //                            + $"  Type: {existin.type} -> {current.type}\n"
-        //                            + $"  Note: {existin.note} -> {current.note}",
-        //                        LogLevel.Info
-        //                    );
-        //                }
-        //            }
-
-        //            filtered.UnionWith(currentRows);
-        //        }
-        //    }
-
-        //    ComponentLib = filtered;
-        //}
-
-        internal static readonly HashSet<string> ImagesNeeded = new();
-
-        internal static HashSet<string> ModsToCheck = new();
-        internal static HashSet<string> ModsToReject = new();
-        internal static HashSet<string> ModsAdded = new();
-
-        public static FileSystemDataSource.PathEscapePolicy kPathEscapePolicy = new();
+            if (pb.asset == original.asset)
+                LogHelper.SendLog("pb.asset == original.asset");
+            else
+                LogHelper.SendLog("pb.asset != original.asset");
+            if (pb.components == original.components)
+                LogHelper.SendLog("pb.components == original.components");
+            else
+                LogHelper.SendLog("pb.components != original.components");
+        }
     }
 }

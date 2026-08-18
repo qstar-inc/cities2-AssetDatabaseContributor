@@ -70,6 +70,10 @@ namespace AssetDatabaseContributor.Systems
         protected override void OnGameLoadingComplete(Purpose purpose, GameMode mode)
         {
             base.OnGameLoadingComplete(purpose, mode);
+            return; // REMOVE BEFORE RELEASE
+#if !DEBUG
+            //REMOVE BEFORE RELEASE
+#endif
             if (!FirstMethodRan || TaskRunning || DisabledForSession)
                 return;
 
@@ -156,6 +160,10 @@ namespace AssetDatabaseContributor.Systems
 
         public void Start()
         {
+            return; // REMOVE BEFORE RELEASE
+#if !DEBUG
+            //REMOVE BEFORE RELEASE
+#endif
             nextRunTime = DateTime.MinValue;
             Cancelled = false;
             NotificationSystem.Push(

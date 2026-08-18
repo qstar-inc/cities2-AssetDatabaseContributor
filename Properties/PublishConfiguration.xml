@@ -47,12 +47,9 @@ Nothing else is accessed by this mod.
   <Screenshot Value="" />
   <Tag Value="Code Mod" />
   <ForumLink Value="https://forum.paradoxplaza.com/forum/threads/starq-mods-assets-projects-megathread.1930389/" />
-  <ModVersion Value="1.0.10" />
+  <ModVersion Value="1.0.11" />
   <GameVersion Value="1.6.0*" />
-  <ChangeLog>- Fix periodic check retriggering continuously on mod verify fail.
-- Add compulsory 60 second wait between calls.
-- Opening a save or Editor permanently disable the system for that session.
-- Removed the manual trigger button (not sure if it's even necessary anymore).</ChangeLog>
+  <ChangeLog>- Mod temporarily disabled while shenenigans are being solved.</ChangeLog>
   <ExternalLink Type="github" Url="https://github.com/qstar-inc/cities2-AssetDatabaseContributor" />
   <ExternalLink Type="discord" Url="https://discord.gg/U2PSjUzUuF" />
   <ExternalLink Type="buymeacoffee" Url="https://buymeacoffee.com/starq" />

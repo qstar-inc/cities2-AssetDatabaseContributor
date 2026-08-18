@@ -1,4 +1,1 @@
-- Fix periodic check retriggering continuously on mod verify fail.
-- Add compulsory 60 second wait between calls.
-- Opening a save or Editor permanently disable the system for that session.
-- Removed the manual trigger button (not sure if it's even necessary anymore).
+- Mod temporarily disabled while shenenigans are being solved.
