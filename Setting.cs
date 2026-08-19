@@ -1,7 +1,4 @@
-﻿using System.Collections.Generic;
-using System.Text.RegularExpressions;
-using System.Threading.Tasks;
-using AssetDatabaseContributor.Systems;
+﻿using AssetDatabaseContributor.Systems;
 using Game.Modding;
 using Game.Settings;
 using Game.UI;
@@ -16,7 +13,7 @@ namespace AssetDatabaseContributor
         public override void SetDefaults()
         {
             ContribEnabled = false;
-            PackCount = 10;
+            PackCount = 50;
             Cooldown = 60;
             TaskDelay = 5;
             AskedForConsent = false;
@@ -33,20 +30,17 @@ namespace AssetDatabaseContributor
         [SettingsUIHidden]
         public bool ConsentForUsernameShare { get; set; } = false;
 
-        [SettingsUIHidden]
         [SettingsUISection(GeneralTab, GeneralGroup)]
         public bool ContribEnabled { get; set; } = false;
 
-        [SettingsUIHidden]
         [SettingsUISlider(
             max = Constants.PackCountMax,
             min = Constants.PackCountMin,
             unit = Unit.kInteger
         )]
         [SettingsUISection(GeneralTab, GeneralGroup)]
-        public int PackCount { get; set; } = 10;
+        public int PackCount { get; set; } = 25;
 
-        [SettingsUIHidden]
         [SettingsUISlider(
             max = Constants.CooldownMax,
             min = Constants.CooldownMin,
@@ -56,7 +50,6 @@ namespace AssetDatabaseContributor
         [SettingsUISection(GeneralTab, GeneralGroup)]
         public int Cooldown { get; set; } = 60;
 
-        [SettingsUIHidden]
         [SettingsUISlider(
             max = Constants.DelayMax,
             min = Constants.DelayMin,
@@ -76,7 +69,6 @@ namespace AssetDatabaseContributor
         //    set { WorldHelper.GetSystem<StartupSystem>().Start(); }
         //}
 
-        [SettingsUIHidden]
         [SettingsUIButton]
         [SettingsUISection(GeneralTab, GeneralGroup)]
         public bool ResetConsent
@@ -86,7 +78,6 @@ namespace AssetDatabaseContributor
 
         bool DisabledPrivacyPolicy => true;
 
-        [SettingsUIHidden]
         [SettingsUIButton]
         [SettingsUISection(GeneralTab, GeneralGroup)]
         [SettingsUIDisableByCondition(typeof(Setting), nameof(DisabledPrivacyPolicy))]
@@ -95,7 +86,6 @@ namespace AssetDatabaseContributor
             set => VariableHelper.OpenURL("https://cities2.starq.fyi/privacy-policy");
         }
 
-        [SettingsUIHidden]
         [SettingsUIButton]
         [SettingsUISection(GeneralTab, GeneralGroup)]
         public bool CleanLocalSource
@@ -167,14 +157,14 @@ namespace AssetDatabaseContributor
             }
         }
 
-        [SettingsUIDisplayName(overrideValue: "Test Prefabs")]
-        [SettingsUIDescription(overrideValue: "Test Prefabs")]
-        [SettingsUISection(GeneralTab, GeneralGroup)]
-        [SettingsUIButton]
-        public bool TestPrefabs
-        {
-            set { WorldHelper.GetSystem<ExtractionSystem>().TestPrefabs(); }
-        }
+        //[SettingsUIDisplayName(overrideValue: "Test Prefabs")]
+        //[SettingsUIDescription(overrideValue: "Test Prefabs")]
+        //[SettingsUISection(GeneralTab, GeneralGroup)]
+        //[SettingsUIButton]
+        //public bool TestPrefabs
+        //{
+        //    set { WorldHelper.GetSystem<ExtractionSystem>().TestPrefabs(); }
+        //}
 
 #endif
     }

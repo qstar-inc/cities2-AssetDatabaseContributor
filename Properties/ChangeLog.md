@@ -1,1 +1,1 @@
-- Mod temporarily disabled while shenenigans are being solved.
+- Minor bugfix

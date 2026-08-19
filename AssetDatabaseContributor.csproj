@@ -2,7 +2,7 @@
   <PropertyGroup>
     <AssemblyName>AssetDatabaseContributor</AssemblyName>
     <AssemblyTitle>Asset Database Contributor</AssemblyTitle>
-    <Version>1.0.11</Version>
+    <Version>2.0.1</Version>
   </PropertyGroup>
   <Import Project="$([System.Environment]::GetEnvironmentVariable('CSII_TOOLPATH', 'EnvironmentVariableTarget.User'))\Mod.props" />
   <Import Project="$([System.Environment]::GetEnvironmentVariable('CSII_TOOLPATH', 'EnvironmentVariableTarget.User'))\Mod.targets" />

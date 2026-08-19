@@ -45,6 +45,7 @@ namespace AssetDatabaseContributor.Systems
         private static readonly string SourceDataPath = $"{Mod.DataDir}\\SourceData.json";
 #endif
 
+        private static int CurrentSourceDataVersion = 2;
         private static long lastServerTime = 0;
         private DateTime nextRunTime = DateTime.MinValue;
 
@@ -70,10 +71,10 @@ namespace AssetDatabaseContributor.Systems
         protected override void OnGameLoadingComplete(Purpose purpose, GameMode mode)
         {
             base.OnGameLoadingComplete(purpose, mode);
-            return; // REMOVE BEFORE RELEASE
-#if !DEBUG
-            //REMOVE BEFORE RELEASE
-#endif
+            //            return; // REMOVE BEFORE RELEASE
+            //#if !DEBUG
+            //            //REMOVE BEFORE RELEASE
+            //#endif
             if (!FirstMethodRan || TaskRunning || DisabledForSession)
                 return;
 
@@ -160,10 +161,10 @@ namespace AssetDatabaseContributor.Systems
 
         public void Start()
         {
-            return; // REMOVE BEFORE RELEASE
-#if !DEBUG
-            //REMOVE BEFORE RELEASE
-#endif
+            //            return; // REMOVE BEFORE RELEASE
+            //#if !DEBUG
+            //            //REMOVE BEFORE RELEASE
+            //#endif
             nextRunTime = DateTime.MinValue;
             Cancelled = false;
             NotificationSystem.Push(
@@ -199,9 +200,6 @@ namespace AssetDatabaseContributor.Systems
 
         public async void DispatchOnMain()
         {
-            if (FirstMethodRan)
-                await Task.Delay(60000);
-
             await Task.Delay(
                 Math.Clamp(Mod.m_Setting.TaskDelay, Constants.DelayMin, Constants.DelayMax) * 1000
             );
@@ -324,6 +322,7 @@ namespace AssetDatabaseContributor.Systems
                 {
                     ServerTime = lastServerTime,
                     Rows = AllSources.ToList(),
+                    Version = CurrentSourceDataVersion,
                 };
 
                 File.WriteAllText(SourceDataPath, JsonConvert.SerializeObject(newCache));
@@ -499,6 +498,15 @@ namespace AssetDatabaseContributor.Systems
                     );
                     if (cache != null)
                     {
+                        if (cache.Version < CurrentSourceDataVersion)
+                        {
+                            cache.ServerTime = 0;
+                            cache.Rows = new();
+                            LogHelper.SendLog(
+                                "SourceData version changed, wiping existing data..."
+                            );
+                        }
+
                         long age = DateTimeOffset.UtcNow.ToUnixTimeSeconds() - cache.ServerTime;
                         string ageText = $"SourceData is {StringHelper.FormatTime(age)}.";
                         if (age < secDiff)
@@ -777,6 +785,7 @@ namespace AssetDatabaseContributor.Systems
             }
 
             int count = 0;
+            DateTime lastTime = DateTime.MinValue;
 
             foreach (string zipPath in newZips)
             {
@@ -803,6 +812,16 @@ namespace AssetDatabaseContributor.Systems
                     );
                     request.Content = content;
                     request.Headers.Add("X-Api-Key", ApiKeyLocal.Value);
+
+                    if (lastTime != DateTime.MinValue)
+                    {
+                        TimeSpan elapsed = DateTime.UtcNow - lastTime;
+
+                        if (elapsed < TimeSpan.FromSeconds(1))
+                            await Task.Delay(1000);
+                    }
+
+                    lastTime = DateTime.UtcNow;
 
                     using HttpResponseMessage? uploadResponse = await Http.SendAsync(request);
 

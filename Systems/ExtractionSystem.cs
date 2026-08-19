@@ -117,9 +117,18 @@ namespace AssetDatabaseContributor.Systems
                 if (!WorldHelper.PrefabSystem.TryGetPrefab(entity, out PrefabBase prefabBase))
                     continue;
 
-                if (prefabBase == null)
+                if (
+                    LogHelper.CheckNull(
+                        prefabBase,
+                        "PrefabBase is null",
+                        "This should never happen",
+                        LogLevel.Info
+                    )
+                )
                     continue;
 
+                PrefabBase? noModPb;
+                PrefabBase compPrefabBase = prefabBase;
                 if (limit == Limits.Game)
                 {
                     if (!prefabBase.isBuiltin && prefabBase.asset == null)
@@ -136,6 +145,19 @@ namespace AssetDatabaseContributor.Systems
                         continue;
 
                     if (prefabBase.asset == null)
+                        continue;
+
+                    if (PrefabHelper.TryGetOriginal(prefabBase, out noModPb) && noModPb != null)
+                        compPrefabBase = noModPb;
+
+                    if (
+                        LogHelper.CheckNull(
+                            noModPb,
+                            "Non Modified PrefabBase is null",
+                            "This should never happen",
+                            LogLevel.Info
+                        )
+                    )
                         continue;
                 }
 
@@ -185,7 +207,7 @@ namespace AssetDatabaseContributor.Systems
                 path = path.Replace(EnvPath.kCacheDataPath, "<m>")
                     .Replace(EnvPath.kContentPath, "<c>");
 
-                if (subPath == "" && prefabBase.TryGet(out ContentPrerequisite cp))
+                if (subPath == "" && compPrefabBase.TryGet(out ContentPrerequisite cp))
                 {
                     source = "DLC";
                     sourceId = cp.m_ContentPrerequisite.name;
@@ -208,13 +230,13 @@ namespace AssetDatabaseContributor.Systems
 
                 Dictionary<string, object> objects = new();
 
-                Dictionary<string, object?>? pData = DumpObject(prefabBase, sourceIdVersion);
+                Dictionary<string, object?>? pData = DumpObject(compPrefabBase, sourceIdVersion);
                 if (pData == null)
                     continue;
 
                 objects[prefabType] = pData;
 
-                foreach (ComponentBase item in prefabBase.components)
+                foreach (ComponentBase item in compPrefabBase.components)
                 {
                     Dictionary<string, object?>? compData = DumpObject(item, sourceIdVersion);
                     if (compData == null)
@@ -223,12 +245,12 @@ namespace AssetDatabaseContributor.Systems
                     objects[compName] = compData;
                 }
 
-                if (prefabBase.TryGet(out UIObject UIO))
+                if (compPrefabBase.TryGet(out UIObject UIO))
                 {
                     if (UIO != null && UIO.m_Icon != null && UIO.m_Icon != string.Empty)
                         ImagesNeeded.Add(UIO.m_Icon);
                 }
-                if (prefabBase.TryGet(out SignatureBuilding SGB))
+                if (compPrefabBase.TryGet(out SignatureBuilding SGB))
                 {
                     if (
                         SGB != null

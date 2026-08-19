@@ -69,10 +69,13 @@ namespace AssetDatabaseContributor.Systems
     public class SourceDataCache
     {
         [JsonProperty("server_time")]
-        public long ServerTime { get; set; }
+        public long ServerTime { get; set; } = 0;
 
         [JsonProperty("source_data")]
         public List<SourceDataRow> Rows { get; set; }
+
+        [JsonProperty("version")]
+        public int Version { get; set; } = 0;
     }
 
     public class SourceDataRow : IEquatable<SourceDataRow>

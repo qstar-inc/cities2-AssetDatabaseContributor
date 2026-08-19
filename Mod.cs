@@ -28,10 +28,10 @@ namespace AssetDatabaseContributor
 
             Directory.CreateDirectory(DataDir);
 
-            //WorldHelper.GetSystem<StartupSystem>();
-            LogHelper.SendLog(
-                "Mod temporarily disabled while shenenigans are being solved. You don't have to do anything."
-            );
+            WorldHelper.GetSystem<StartupSystem>();
+            //LogHelper.SendLog(
+            //    "Mod temporarily disabled while shenenigans are being solved. You don't have to do anything."
+            //);
         }
 
         public void OnDispose()

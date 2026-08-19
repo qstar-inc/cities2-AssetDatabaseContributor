@@ -47,9 +47,9 @@ Nothing else is accessed by this mod.
   <Screenshot Value="" />
   <Tag Value="Code Mod" />
   <ForumLink Value="https://forum.paradoxplaza.com/forum/threads/starq-mods-assets-projects-megathread.1930389/" />
-  <ModVersion Value="1.0.11" />
+  <ModVersion Value="2.0.1" />
   <GameVersion Value="1.6.0*" />
-  <ChangeLog>- Mod temporarily disabled while shenenigans are being solved.</ChangeLog>
+  <ChangeLog>- Minor bugfix</ChangeLog>
   <ExternalLink Type="github" Url="https://github.com/qstar-inc/cities2-AssetDatabaseContributor" />
   <ExternalLink Type="discord" Url="https://discord.gg/U2PSjUzUuF" />
   <ExternalLink Type="buymeacoffee" Url="https://buymeacoffee.com/starq" />

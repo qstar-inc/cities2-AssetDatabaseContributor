@@ -3,16 +3,12 @@ using System.IO;
 using System.IO.Compression;
 using System.Linq;
 using System.Reflection;
-using System.Text;
 using Colossal.IO.AssetDatabase;
-using Colossal.Logging;
-using Colossal.OdinSerializer;
 using Colossal.PSI.Common;
 using CSVFile;
 using Game;
 using Game.Prefabs;
 using StarQ.Shared.Extensions;
-using UnityEngine;
 
 namespace AssetDatabaseContributor.Systems
 {
@@ -142,43 +138,43 @@ namespace AssetDatabaseContributor.Systems
             ValidComponents = validComps.ToList();
         }
 
-        public void TestPrefabs()
-        {
-            WorldHelper.PrefabSystem.TryGetPrefab(
-                new PrefabID(
-                    nameof(TrackPrefab),
-                    "W7Double Train Track - Station Middle",
-                    Colossal.Hash128.Parse("b1fe85b77295966146e41d9f6da6fe65")
-                ),
-                out PrefabBase pb
-            );
+        //public void TestPrefabs()
+        //{
+        //    WorldHelper.PrefabSystem.TryGetPrefab(
+        //        new PrefabID(
+        //            nameof(TrackPrefab),
+        //            "W7Double Train Track - Station Middle",
+        //            Colossal.Hash128.Parse("b1fe85b77295966146e41d9f6da6fe65")
+        //        ),
+        //        out PrefabBase pb
+        //    );
 
-            if (!PrefabHelper.TryGetOriginal(pb, out PrefabBase original))
-            {
-                LogHelper.SendLog("so is null");
-                return;
-            }
+        //    if (!PrefabHelper.TryGetOriginal(pb, out PrefabBase original))
+        //    {
+        //        LogHelper.SendLog("so is null");
+        //        return;
+        //    }
 
-            if (original.GetType() == pb.GetType())
-            {
-                if (pb.TryGet(out UIObject uio))
-                    LogHelper.SendLog($"UIO Icon is {uio.m_Icon}");
-                else
-                    LogHelper.SendLog($"No UIO Icon in pb");
-                if (original.TryGet(out UIObject uio2))
-                    LogHelper.SendLog($"UIO Icon is {uio2.m_Icon}");
-                else
-                    LogHelper.SendLog($"No UIO Icon in so");
-            }
+        //    if (original.GetType() == pb.GetType())
+        //    {
+        //        if (pb.TryGet(out UIObject uio))
+        //            LogHelper.SendLog($"UIO Icon is {uio.m_Icon}");
+        //        else
+        //            LogHelper.SendLog($"No UIO Icon in pb");
+        //        if (original.TryGet(out UIObject uio2))
+        //            LogHelper.SendLog($"UIO Icon is {uio2.m_Icon}");
+        //        else
+        //            LogHelper.SendLog($"No UIO Icon in so");
+        //    }
 
-            if (pb.asset == original.asset)
-                LogHelper.SendLog("pb.asset == original.asset");
-            else
-                LogHelper.SendLog("pb.asset != original.asset");
-            if (pb.components == original.components)
-                LogHelper.SendLog("pb.components == original.components");
-            else
-                LogHelper.SendLog("pb.components != original.components");
-        }
+        //    if (pb.asset == original.asset)
+        //        LogHelper.SendLog("pb.asset == original.asset");
+        //    else
+        //        LogHelper.SendLog("pb.asset != original.asset");
+        //    if (pb.components == original.components)
+        //        LogHelper.SendLog("pb.components == original.components");
+        //    else
+        //        LogHelper.SendLog("pb.components != original.components");
+        //}
     }
 }
