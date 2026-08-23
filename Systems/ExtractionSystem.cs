@@ -86,6 +86,7 @@ namespace AssetDatabaseContributor.Systems
             string timeNow = $"{now:yyyy-MM-dd-HH-mm-ss}";
 
             //int i = 0;
+            //string assetToFind = "StarQ_SP NL";
 
             List<AssetDataExtract> assetData = new();
             Dictionary<
@@ -104,18 +105,21 @@ namespace AssetDatabaseContributor.Systems
             UnityObjectsMap? pmap = AssetDatabase.global.resources.prefabsMap;
             LogHelper.SendLog($"{entities.Length} entites found", LogLevel.DEVD);
 
-            if (ModsToCheck.Count > 0)
-            {
-                LogHelper.SendLog(
-                    $"Starting asset scan for mods: {string.Join(", ", ModsToCheck)}",
-                    LogLevel.DEVD
-                );
-            }
+            //if (ModsToCheck.Count > 0)
+            //{
+            //    LogHelper.SendLog(
+            //        $"Extraction started for mods: {string.Join(", ", ModsToCheck)}",
+            //        LogLevel.DEVD
+            //    );
+            //}
 
             foreach (Entity entity in entities)
             {
                 if (!WorldHelper.PrefabSystem.TryGetPrefab(entity, out PrefabBase prefabBase))
                     continue;
+
+                //if (prefabBase.name.Contains(assetToFind))
+                //    LogHelper.SendLog($"PrefabBase found for {prefabBase.name}", LogLevel.DEVD);
 
                 if (
                     LogHelper.CheckNull(
@@ -126,8 +130,13 @@ namespace AssetDatabaseContributor.Systems
                     )
                 )
                     continue;
+                //if (prefabBase.name.Contains(assetToFind))
+                //    LogHelper.SendLog(
+                //        $"PrefabBase for {prefabBase.name} is not null",
+                //        LogLevel.DEVD
+                //    );
 
-                PrefabBase? noModPb;
+                PrefabBase? noModPb = null;
                 PrefabBase compPrefabBase = prefabBase;
                 if (limit == Limits.Game)
                 {
@@ -142,23 +151,24 @@ namespace AssetDatabaseContributor.Systems
                 else if (limit == Limits.Mod)
                 {
                     if (prefabBase.isBuiltin)
+                    {
+                        //if (prefabBase.name.Contains(assetToFind))
+                        //    LogHelper.SendLog(
+                        //        $"PrefabBase for {prefabBase.name} is built in",
+                        //        LogLevel.DEVD
+                        //    );
                         continue;
+                    }
 
                     if (prefabBase.asset == null)
+                    {
+                        //if (prefabBase.name.Contains(assetToFind))
+                        //    LogHelper.SendLog(
+                        //        $"PrefabBase for {prefabBase.name} has null asset",
+                        //        LogLevel.DEVD
+                        //    );
                         continue;
-
-                    if (PrefabHelper.TryGetOriginal(prefabBase, out noModPb) && noModPb != null)
-                        compPrefabBase = noModPb;
-
-                    if (
-                        LogHelper.CheckNull(
-                            noModPb,
-                            "Non Modified PrefabBase is null",
-                            "This should never happen",
-                            LogLevel.Info
-                        )
-                    )
-                        continue;
+                    }
                 }
 
                 string subPath = string.Empty;
@@ -179,14 +189,39 @@ namespace AssetDatabaseContributor.Systems
 
                     if (limit == Limits.Mod)
                     {
-                        if (!path.Contains(EnvPath.kCacheDataPath))
-                            continue;
-
                         if (!ModsToCheck.Any(s => subPath.Contains(s)))
+                            continue;
+                        //LogHelper.SendLog($"subPath ({subPath}) is not rejected", LogLevel.DEVD);
+
+                        if (!path.Contains(EnvPath.kCacheDataPath))
                         {
-                            //LogHelper.SendLog($"subPath ({subPath}) is rejected", LogLevel.DEVD);
+                            //LogHelper.SendLog(
+                            //    $"path {path} is not in EnvPath.kCacheDataPath",
+                            //    LogLevel.DEVD
+                            //);
                             continue;
                         }
+
+                        //LogHelper.SendLog(
+                        //    $"Searching for original of {prefabBase.name}",
+                        //    LogLevel.DEVD
+                        //);
+                        if (PrefabHelper.TryGetOriginal(prefabBase, out noModPb) && noModPb != null)
+                        {
+                            //LogHelper.SendLog(
+                            //    $"Original of {prefabBase.name} found",
+                            //    LogLevel.DEVD
+                            //);
+                            compPrefabBase = noModPb;
+                        }
+
+                        if (noModPb == null)
+                        {
+                            //LogHelper.SendLog($"of {prefabBase.name} is null", LogLevel.DEVD);
+                            continue;
+                        }
+
+                        //LogHelper.SendLog($"continuing...", LogLevel.DEVD);
 
                         string modText = subPath.Split("/")[1];
                         sourceId = modText.Split("_")[0];
@@ -203,6 +238,7 @@ namespace AssetDatabaseContributor.Systems
                     source = "Game";
                     sourceId = "Game";
                 }
+                //LogHelper.SendLog($"item: {prefabBase.name}", LogLevel.DEVD);
 
                 path = path.Replace(EnvPath.kCacheDataPath, "<m>")
                     .Replace(EnvPath.kContentPath, "<c>");
@@ -226,13 +262,22 @@ namespace AssetDatabaseContributor.Systems
                 string sourceIdVersion = $"{sourceId}_{sourceVersion}";
 
                 if (ModsToReject.Contains(sourceIdVersion))
+                {
+                    //LogHelper.SendLog(
+                    //    $"sourceIdVersion ({sourceIdVersion}) is in ModsToReject",
+                    //    LogLevel.DEVD
+                    //);
                     continue;
+                }
 
                 Dictionary<string, object> objects = new();
 
                 Dictionary<string, object?>? pData = DumpObject(compPrefabBase, sourceIdVersion);
                 if (pData == null)
+                {
+                    //LogHelper.SendLog($"pData (for {prefabBase.name}) is null", LogLevel.DEVD);
                     continue;
+                }
 
                 objects[prefabType] = pData;
 
@@ -241,6 +286,7 @@ namespace AssetDatabaseContributor.Systems
                     Dictionary<string, object?>? compData = DumpObject(item, sourceIdVersion);
                     if (compData == null)
                         continue;
+
                     string compName = item.GetType().Name;
                     objects[compName] = compData;
                 }
@@ -250,6 +296,7 @@ namespace AssetDatabaseContributor.Systems
                     if (UIO != null && UIO.m_Icon != null && UIO.m_Icon != string.Empty)
                         ImagesNeeded.Add(UIO.m_Icon);
                 }
+
                 if (compPrefabBase.TryGet(out SignatureBuilding SGB))
                 {
                     if (
@@ -282,6 +329,12 @@ namespace AssetDatabaseContributor.Systems
 
                 //if (i >= 10)
                 //    break;
+            }
+
+            if (assetData.Count <= 0 && ImagesNeeded.Count <= 0)
+            {
+                LogHelper.SendLog($"Nothing to collect", LogLevel.DEVD);
+                return;
             }
 
             LogHelper.SendLog($"{assetData.Count} assets logged", LogLevel.DEVD);

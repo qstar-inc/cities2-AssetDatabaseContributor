@@ -15,7 +15,7 @@ namespace AssetDatabaseContributor
             ContribEnabled = false;
             PackCount = 50;
             Cooldown = 60;
-            TaskDelay = 5;
+            TaskDelay = 30;
             AskedForConsent = false;
             ConsentForContribution = false;
             ConsentForUsernameShare = false;
@@ -57,7 +57,7 @@ namespace AssetDatabaseContributor
             unit = Unit.kInteger
         )]
         [SettingsUISection(GeneralTab, GeneralGroup)]
-        public int TaskDelay { get; set; } = 5;
+        public int TaskDelay { get; set; } = 30;
 
         bool InGameOrEditor => WorldHelper.IsGameOrEditor;
 

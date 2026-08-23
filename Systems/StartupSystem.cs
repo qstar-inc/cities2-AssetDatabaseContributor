@@ -34,6 +34,7 @@ namespace AssetDatabaseContributor.Systems
     {
         public static string notifIdentifier = $"{Mod.Id}.Notif";
         private static bool FirstMethodRan = false;
+        private static bool FirstLoopDone = false;
         private static bool TaskRunning = false;
         private static bool DisabledTemporarily = false;
         private static bool DisabledForSession = false;
@@ -45,7 +46,7 @@ namespace AssetDatabaseContributor.Systems
         private static readonly string SourceDataPath = $"{Mod.DataDir}\\SourceData.json";
 #endif
 
-        private static int CurrentSourceDataVersion = 2;
+        private static readonly int CurrentSourceDataVersion = 2;
         private static long lastServerTime = 0;
         private DateTime nextRunTime = DateTime.MinValue;
 
@@ -53,7 +54,8 @@ namespace AssetDatabaseContributor.Systems
 
         private static ExecutableAsset? SMC = null;
         private static Dictionary<string, LoadedModInfo> LoadedPackagesFromSMC = new();
-        private static HashSet<string> FailedPackages = new();
+        private static readonly HashSet<string> FailedPackages = new();
+        private static readonly HashSet<string> TriedPackages = new();
 
         private static string Username = string.Empty;
         private const string ApiBase = ApiKeyLocal.Web;
@@ -63,7 +65,7 @@ namespace AssetDatabaseContributor.Systems
         protected override void OnCreate()
         {
             base.OnCreate();
-            Colossal.Core.MainThreadDispatcher.RegisterUpdater(FirstRunMethod);
+            ModHelper.AddAfterActivePlaysetOrModStatusChanged(TriggerStart);
         }
 
         protected override void OnUpdate() { }
@@ -99,6 +101,15 @@ namespace AssetDatabaseContributor.Systems
             Colossal.Core.MainThreadDispatcher.RegisterUpdater(DispatchOnMain);
         }
 
+        private void TriggerStart()
+        {
+            LogHelper.SendLog("Playset updated... Retriggering scan");
+            if (FirstMethodRan)
+                Start();
+            else
+                FirstRunMethod();
+        }
+
         private static readonly HttpClient Http = new();
 
         private bool FirstRunMethod()
@@ -113,6 +124,7 @@ namespace AssetDatabaseContributor.Systems
                 || GameManager.instance.state == GameManager.State.Booting
             )
                 return false;
+            LogHelper.SendLog("Running FirstMethod", LogLevel.DEVD);
             Start();
             FirstMethodRan = true;
             return true;
@@ -161,10 +173,6 @@ namespace AssetDatabaseContributor.Systems
 
         public void Start()
         {
-            //            return; // REMOVE BEFORE RELEASE
-            //#if !DEBUG
-            //            //REMOVE BEFORE RELEASE
-            //#endif
             nextRunTime = DateTime.MinValue;
             Cancelled = false;
             NotificationSystem.Push(
@@ -200,21 +208,34 @@ namespace AssetDatabaseContributor.Systems
 
         public async void DispatchOnMain()
         {
-            await Task.Delay(
-                Math.Clamp(Mod.m_Setting.TaskDelay, Constants.DelayMin, Constants.DelayMax) * 1000
-            );
+#if !DEBUG
+            bool hasEAI = ModHelper.IsModActive("ExtraAssetsImporter");
+            if (!FirstLoopDone)
+                LogHelper.SendLog(
+                    $"EAI {(hasEAI ? "is active" : "not present")}. Waiting for {(hasEAI ? 60 : 10)} seconds."
+                );
 
+            await Task.Delay(
+                Math.Clamp(
+                    FirstLoopDone ? Mod.m_Setting.TaskDelay : (hasEAI ? 60 : 10),
+                    1,
+                    Constants.DelayMax
+                ) * 1000
+            );
+#endif
             if (DisabledForSession)
                 return;
 
             if (TaskRunning || DisabledTemporarily)
             {
+                await Task.Delay(10000);
                 Colossal.Core.MainThreadDispatcher.RegisterUpdater(DispatchOnMain);
                 return;
             }
 
             if (DateTime.Now < nextRunTime)
             {
+                await Task.Delay(10000);
                 Colossal.Core.MainThreadDispatcher.RegisterUpdater(DispatchOnMain);
                 return;
             }
@@ -278,17 +299,17 @@ namespace AssetDatabaseContributor.Systems
                         Mod.m_Setting.AskedForConsent = true;
                     }
 
-                    if (!FindSMC())
-                    {
-                        CancelTask(true, "SMC assembly not found? How?");
-                        return;
-                    }
-
                     if (Mod.m_Setting.AskedForConsent && !Mod.m_Setting.ConsentForContribution)
                     {
                         CancelTask(true, "User did not consent for contribution");
                         return;
                     }
+                }
+
+                if (!FindSMC())
+                {
+                    CancelTask(true, "SMC assembly not found? How?");
+                    return;
                 }
 
                 stopwatch = Stopwatch.StartNew();
@@ -347,6 +368,10 @@ namespace AssetDatabaseContributor.Systems
             catch (Exception ex)
             {
                 LogHelper.SendLog($"Something went wrong: {ex.Message}", LogLevel.Error);
+            }
+            finally
+            {
+                FirstLoopDone = true;
             }
 
             nextRunTime = DateTime.Now.AddMinutes(
@@ -498,7 +523,7 @@ namespace AssetDatabaseContributor.Systems
                     );
                     if (cache != null)
                     {
-                        if (cache.Version < CurrentSourceDataVersion)
+                        if (cache.Version != CurrentSourceDataVersion)
                         {
                             cache.ServerTime = 0;
                             cache.Rows = new();
@@ -580,7 +605,7 @@ namespace AssetDatabaseContributor.Systems
             ServerSourceDataResponse? parsed;
             try
             {
-                LogHelper.SendLog($"Parsing latest SourceData: {body}", LogLevel.DEVD);
+                //LogHelper.SendLog($"Parsing latest SourceData: {body}", LogLevel.DEVD);
                 parsed = JsonConvert.DeserializeObject<ServerSourceDataResponse>(body);
                 LogHelper.SendLog($"Parsed SourceData: {parsed.ToJSONString()}", LogLevel.DEVD);
             }
@@ -619,14 +644,15 @@ namespace AssetDatabaseContributor.Systems
 
             Random rng = new();
             List<string> packagesToValidate = packages
-                .Except(knownModKeys)
+                .Except(TriedPackages)
                 .Except(FailedPackages)
+                .Except(knownModKeys)
                 .OrderBy(_ => rng.Next())
                 .ToList();
 
             if (packagesToValidate.Count <= 0)
             {
-                CancelTask(false, "No packages found to be validated");
+                CancelTask(true, "No packages found to be validated");
                 return;
             }
 
@@ -643,8 +669,11 @@ namespace AssetDatabaseContributor.Systems
             );
 
             LogHelper.SendLog(
-                $"Validating max {validableMax} out of {packagesToValidate.Count} packages"
+                $"Validating from {packagesToValidate.Count} packages (max {validableMax})"
             );
+
+            foreach (var package in packagesToValidate)
+                TriedPackages.Add(package);
 
             HashSet<string> modsToCheck = (
                 await ValidateModFoldersAsync(packagesToValidate, validableMax)
@@ -657,7 +686,7 @@ namespace AssetDatabaseContributor.Systems
             }
 
             LogHelper.SendLog(
-                $"Starting scan for {modsToCheck.Count} mods: {string.Join(", ", modsToCheck)}"
+                $"Preparing scan for {modsToCheck.Count} mods: {string.Join(", ", modsToCheck)}"
             );
 
             NotificationSystem.Push(
@@ -1097,27 +1126,33 @@ namespace AssetDatabaseContributor.Systems
 
         internal void CancelTask(
             bool disabled = false,
-            string log = null,
+            string? log = null,
             LogLevel logLevel = LogLevel.Info
         )
         {
+            FirstLoopDone = true;
             Cancelled = true;
-            NotificationSystem.Pop(
-                notifIdentifier,
-                delay: 3,
-                text: LocaleHelper.Translate($"{notifIdentifier}.Cancelled"),
-                progressState: ProgressState.Cancelled,
-                onClicked: () =>
-                {
-                    WorldHelper
-                        .GetSystem<OptionsUISystem>()
-                        .OpenPage($"{Mod.Id}.{Mod.Id}.Mod", "Setting.LogTab", false);
-                }
-            );
+            if (NotificationSystem.Exist(notifIdentifier))
+                NotificationSystem.Pop(
+                    notifIdentifier,
+                    delay: 3,
+                    title: Mod.Name,
+                    text: LocaleHelper.Translate($"{notifIdentifier}.Cancelled"),
+                    progressState: ProgressState.Cancelled,
+                    onClicked: () =>
+                    {
+                        WorldHelper
+                            .GetSystem<OptionsUISystem>()
+                            .OpenPage($"{Mod.Id}.{Mod.Id}.Mod", "Setting.LogTab", false);
+                    }
+                );
+
             if (log != null)
-            {
-                LogHelper.SendLog($"{log.TrimEnd('.')}. Cancelling...", logLevel);
-            }
+                LogHelper.SendLog(
+                    $"{log.TrimEnd('.')}. Cancelling {(disabled ? "permanently" : "temporarily")}...",
+                    logLevel
+                );
+
             DisabledForSession = disabled;
             TaskRunning = false;
             if (stopwatch != null && stopwatch.IsRunning)
@@ -1125,10 +1160,9 @@ namespace AssetDatabaseContributor.Systems
                 stopwatch.Stop();
                 LogHelper.SendLog($"Cancelled after {stopwatch.Elapsed}");
             }
+
             if (!DisabledForSession)
-            {
                 Colossal.Core.MainThreadDispatcher.RegisterUpdater(DispatchOnMain);
-            }
         }
 
         internal static async Task<HashSet<string>> ValidateModFoldersAsync(
@@ -1240,8 +1274,6 @@ namespace AssetDatabaseContributor.Systems
                 .EnumerateFiles(subfolder, "*", SearchOption.AllDirectories)
                 .Where(file => !file.Contains(".metadata") && !file.Contains(".cpatch"))
                 .ToArray();
-
-            LogHelper.SendLog($"{files.Length} files found", LogLevel.DEVD);
 
             foreach (string filePath in files)
             {

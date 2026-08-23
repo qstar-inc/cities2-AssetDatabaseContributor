@@ -47,9 +47,13 @@ Nothing else is accessed by this mod.
   <Screenshot Value="" />
   <Tag Value="Code Mod" />
   <ForumLink Value="https://forum.paradoxplaza.com/forum/threads/starq-mods-assets-projects-megathread.1930389/" />
-  <ModVersion Value="2.0.1" />
+  <ModVersion Value="2.0.2" />
   <GameVersion Value="1.6.0*" />
-  <ChangeLog>- Minor bugfix</ChangeLog>
+  <Dependency Id="79186" />
+  <ChangeLog>- Add a 1 minute delay over the existing Task Delay option when Extra Assets Importer mod is present (This will be improved later after an update being pushed to EAI).
+- Mod scan now starts only after the playset is fully loaded (after the Loading Playset Content disappears).
+- Reduced unnecessary logging.
+- Added forced task delay time between check loops and changed default task delay to be 30 seconds.</ChangeLog>
   <ExternalLink Type="github" Url="https://github.com/qstar-inc/cities2-AssetDatabaseContributor" />
   <ExternalLink Type="discord" Url="https://discord.gg/U2PSjUzUuF" />
   <ExternalLink Type="buymeacoffee" Url="https://buymeacoffee.com/starq" />

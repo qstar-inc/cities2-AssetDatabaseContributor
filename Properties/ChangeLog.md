@@ -1,1 +1,4 @@
-- Minor bugfix
+- Add a 1 minute delay over the existing Task Delay option when Extra Assets Importer mod is present (This will be improved later after an update being pushed to EAI).
+- Mod scan now starts only after the playset is fully loaded (after the Loading Playset Content disappears).
+- Reduced unnecessary logging.
+- Added forced task delay time between check loops and changed default task delay to be 30 seconds.
