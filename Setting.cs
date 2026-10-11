@@ -4,6 +4,10 @@ using Game.Settings;
 using Game.UI;
 using StarQ.Shared.Extensions;
 using StarQ.Shared.Generators;
+#if DEBUG
+using System.Collections.Generic;
+using System.Text.RegularExpressions;
+#endif
 
 namespace AssetDatabaseContributor
 {
@@ -13,9 +17,9 @@ namespace AssetDatabaseContributor
         public override void SetDefaults()
         {
             ContribEnabled = false;
-            PackCount = 50;
-            Cooldown = 60;
-            TaskDelay = 30;
+            PackCount = Constants.PackCountMax;
+            Cooldown = Constants.CooldownMin;
+            TaskDelay = Constants.DelayMin;
             AskedForConsent = false;
             ConsentForContribution = false;
             ConsentForUsernameShare = false;
@@ -61,14 +65,6 @@ namespace AssetDatabaseContributor
 
         bool InGameOrEditor => WorldHelper.IsGameOrEditor;
 
-        //[SettingsUIButton]
-        //[SettingsUISection(GeneralTab, GeneralGroup)]
-        //[SettingsUIDisableByCondition(typeof(Setting), nameof(InGameOrEditor))]
-        //public bool RunNow
-        //{
-        //    set { WorldHelper.GetSystem<StartupSystem>().Start(); }
-        //}
-
         [SettingsUIButton]
         [SettingsUISection(GeneralTab, GeneralGroup)]
         public bool ResetConsent
@@ -88,25 +84,12 @@ namespace AssetDatabaseContributor
 
         [SettingsUIButton]
         [SettingsUISection(GeneralTab, GeneralGroup)]
-        public bool CleanLocalSource
+        public bool CleanupLocalData
         {
-            set { StartupSystem.CleanLocalSource(); }
+            set { StartupSystem.CleanupLocalData(); }
         }
 
 #if DEBUG
-        [SettingsUIDisplayName(overrideValue: "Extract Game Prefabs")]
-        [SettingsUIDescription(overrideValue: "Extract Game Prefabs")]
-        [SettingsUISection(GeneralTab, GeneralGroup)]
-        [SettingsUIButton]
-        public bool ExtractGamePrefabs
-        {
-            set
-            {
-                WorldHelper
-                    .GetSystem<ExtractionSystem>()
-                    .ExtractPrefabs(ExtractionSystem.Limits.Game);
-            }
-        }
 
         [SettingsUITextInput]
         [SettingsUISection(GeneralTab, GeneralGroup)]
@@ -135,36 +118,41 @@ namespace AssetDatabaseContributor
             ExtractionSystem.ModsToCheck = list;
         }
 
-        [SettingsUIDisplayName(overrideValue: "Extract Mod Prefabs")]
-        [SettingsUIDescription(overrideValue: "Extract Mod Prefabs")]
+        [SettingsUIDisplayName(overrideValue: "Extract Data")]
+        [SettingsUIDescription(overrideValue: "")]
         [SettingsUISection(GeneralTab, GeneralGroup)]
         [SettingsUIButton]
-        public bool ExtractSubscribedPrefabs
+        public bool ExtractData
         {
             set
             {
                 ValidateSubs();
 
-                WorldHelper.RunOnMainThreadAsync(
-                    WorldHelper.GetSystem<StartupSystem>().CollectImages
-                );
-
-                Task.Run(WorldHelper.GetSystem<StartupSystem>().ZipImages);
-
-                WorldHelper
-                    .GetSystem<ExtractionSystem>()
-                    .ExtractPrefabs(ExtractionSystem.Limits.Mod);
+                WorldHelper.GetSystem<ExtractionSystem>().ExtractData();
             }
         }
 
-        //[SettingsUIDisplayName(overrideValue: "Test Prefabs")]
-        //[SettingsUIDescription(overrideValue: "Test Prefabs")]
-        //[SettingsUISection(GeneralTab, GeneralGroup)]
-        //[SettingsUIButton]
-        //public bool TestPrefabs
-        //{
-        //    set { WorldHelper.GetSystem<ExtractionSystem>().TestPrefabs(); }
-        //}
+        [SettingsUIDisplayName(overrideValue: "Startup System")]
+        [SettingsUIDescription(overrideValue: "Startup System")]
+        [SettingsUISection(GeneralTab, GeneralGroup)]
+        [SettingsUIButton]
+        public bool StartStartupSystem
+        {
+            set
+            {
+                StartupSystem.TaskRunning = false;
+                WorldHelper.GetSystem<StartupSystem>().AfterGameLoadingComplete();
+            }
+        }
+
+        [SettingsUIDisplayName(overrideValue: "MapTest")]
+        [SettingsUIDescription(overrideValue: "MapTest")]
+        [SettingsUISection(GeneralTab, GeneralGroup)]
+        [SettingsUIButton]
+        public bool MapTest
+        {
+            set { WorldHelper.GetSystem<TestSystem>().TestStuff(); }
+        }
 
 #endif
     }

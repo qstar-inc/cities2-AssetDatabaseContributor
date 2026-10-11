@@ -1,4 +1,7 @@
-- Add a 1 minute delay over the existing Task Delay option when Extra Assets Importer mod is present (This will be improved later after an update being pushed to EAI).
-- Mod scan now starts only after the playset is fully loaded (after the Loading Playset Content disappears).
-- Reduced unnecessary logging.
-- Added forced task delay time between check loops and changed default task delay to be 30 seconds.
+- Map package data are now contributed.
+- Locales now only export real content, no fallbacks.
+- File list for each verified mod packages (including what's inside zips) are now contributed.
+- Assets with custom components are no longer rejected.
+- Assets with custom components requires the dependent mod to be present before it's contributed.
+- Component data is now imported directly from the server instead of relying on mod updates.
+- Improved performance both on mod-side and server-side.

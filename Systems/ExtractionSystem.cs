@@ -6,16 +6,17 @@ using System.IO.Compression;
 using System.Linq;
 using System.Reflection;
 using System.Text;
+using AssetDatabaseContributor.Types;
+using Colossal;
 using Colossal.IO.AssetDatabase;
-using Colossal.Localization;
 using Colossal.PSI.Environment;
+using Colossal.UI;
 using CSVFile;
 using Game;
+using Game.Assets;
 using Game.Prefabs;
 using Newtonsoft.Json;
 using StarQ.Shared.Extensions;
-using Unity.Collections;
-using Unity.Entities;
 using UnityEngine;
 
 namespace AssetDatabaseContributor.Systems
@@ -26,51 +27,9 @@ namespace AssetDatabaseContributor.Systems
 
         protected override void OnUpdate() { }
 
-        internal static JsonSerializerSettings GetJsonSetting()
+        public void ExtractData()
         {
-            JsonSerializerSettings settings = new()
-            {
-                Formatting = Formatting.None,
-                NullValueHandling = NullValueHandling.Ignore,
-                Error = (sender, args) =>
-                {
-                    LogHelper.SendLog(
-                        $"Serialization error on property '{args.ErrorContext.Member}': {args.ErrorContext.Error.Message}"
-                    );
-                    args.ErrorContext.Handled = true;
-                },
-            };
-            return settings;
-        }
-
-        internal static CSVSettings GetCSVSetting()
-        {
-            CSVSettings settings = new()
-            {
-                FieldDelimiter = '\t',
-                TextQualifier = '~',
-                LineSeparator = "\n",
-                HeaderRowIncluded = true,
-                ForceQualifiers = false,
-            };
-            return settings;
-        }
-
-        public enum Limits
-        {
-            Game,
-            Mod,
-        }
-
-        public enum Mode
-        {
-            Trigger,
-            Task,
-        }
-
-        public void ExtractPrefabs(Limits limit)
-        {
-            if (limit == Limits.Mod && ModsToCheck.Count == 0)
+            if (ModsToCheck.Count == 0)
             {
                 LogHelper.SendLog($"No mods selected to check. Cancelling...");
                 return;
@@ -78,45 +37,36 @@ namespace AssetDatabaseContributor.Systems
 
             ModsAdded.Clear();
             ImagesNeeded.Clear();
-            ComponentLib.Clear();
-            LoadExistingComponentLib();
+            //LoadExistingComponentLib();
             DateTime now = DateTime.UtcNow;
-            LogHelper.SendLog($"Starting extraction at {now.ToLocalTime()}...", LogLevel.DEVD);
+            LogHelper.SendLog(
+                $"Starting prefab extraction at {now.ToLocalTime()}...",
+                LogLevel.DEVD
+            );
 
             string timeNow = $"{now:yyyy-MM-dd-HH-mm-ss}";
 
-            //int i = 0;
-            //string assetToFind = "StarQ_SP NL";
-
-            List<AssetDataExtract> assetData = new();
+            List<PrefabDataExtract> assetData = new();
+            List<MapDataExtract> mapDataExtracts = new();
             Dictionary<
-                (string Source, string SourceId, string SourceVersion),
+                (string SourceId, string SourceVersion),
                 List<(string Prefix, string Key)>
             > localesToExtract = new();
 
-            NativeArray<Entity> entities = SystemAPI
-                .QueryBuilder()
-                .WithAll<PrefabData>()
-                .Build()
-                .ToEntityArray(Allocator.Temp);
-
-            GetDLCVersions();
-
             UnityObjectsMap? pmap = AssetDatabase.global.resources.prefabsMap;
-            LogHelper.SendLog($"{entities.Length} entites found", LogLevel.DEVD);
 
-            //if (ModsToCheck.Count > 0)
-            //{
-            //    LogHelper.SendLog(
-            //        $"Extraction started for mods: {string.Join(", ", ModsToCheck)}",
-            //        LogLevel.DEVD
-            //    );
-            //}
-
-            foreach (Entity entity in entities)
+            #region prefab extraction
+            foreach (
+                PrefabAsset prefabAsset in AssetDatabase.global.GetAssets<PrefabAsset>(default)
+            )
             {
-                if (!WorldHelper.PrefabSystem.TryGetPrefab(entity, out PrefabBase prefabBase))
+                if (prefabAsset.database is not AssetDatabase<ParadoxMods>)
                     continue;
+
+                PrefabBase prefabBase = prefabAsset.GetInstance<PrefabBase>();
+
+                //if (!WorldHelper.PrefabSystem.TryGetPrefab(entity, out PrefabBase prefabBase))
+                //    continue;
 
                 //if (prefabBase.name.Contains(assetToFind))
                 //    LogHelper.SendLog($"PrefabBase found for {prefabBase.name}", LogLevel.DEVD);
@@ -130,160 +80,78 @@ namespace AssetDatabaseContributor.Systems
                     )
                 )
                     continue;
-                //if (prefabBase.name.Contains(assetToFind))
-                //    LogHelper.SendLog(
-                //        $"PrefabBase for {prefabBase.name} is not null",
-                //        LogLevel.DEVD
-                //    );
 
-                PrefabBase? noModPb = null;
                 PrefabBase compPrefabBase = prefabBase;
-                if (limit == Limits.Game)
-                {
-                    if (!prefabBase.isBuiltin && prefabBase.asset == null)
-                        continue;
-                    if (
-                        prefabBase.asset != null
-                        && prefabBase.asset.path.Contains(EnvPath.kUserDataPath)
-                    )
-                        continue;
-                }
-                else if (limit == Limits.Mod)
-                {
-                    if (prefabBase.isBuiltin)
-                    {
-                        //if (prefabBase.name.Contains(assetToFind))
-                        //    LogHelper.SendLog(
-                        //        $"PrefabBase for {prefabBase.name} is built in",
-                        //        LogLevel.DEVD
-                        //    );
-                        continue;
-                    }
-
-                    if (prefabBase.asset == null)
-                    {
-                        //if (prefabBase.name.Contains(assetToFind))
-                        //    LogHelper.SendLog(
-                        //        $"PrefabBase for {prefabBase.name} has null asset",
-                        //        LogLevel.DEVD
-                        //    );
-                        continue;
-                    }
-                }
 
                 string subPath = string.Empty;
                 string path = string.Empty;
                 string guid = string.Empty;
 
-                string source = "";
                 string sourceId = "";
                 string sourceVersion = "";
 
-                if (prefabBase.asset != null)
-                {
-                    if (prefabBase.asset.subPath != null)
-                        subPath = prefabBase.asset.subPath;
+                if (prefabBase.asset.subPath != null)
+                    subPath = prefabBase.asset.subPath;
 
-                    if (prefabBase.asset.path != null)
-                        path = prefabBase.asset.path;
+                if (prefabBase.asset.path != null)
+                    path = prefabBase.asset.path;
 
-                    if (limit == Limits.Mod)
-                    {
-                        if (!ModsToCheck.Any(s => subPath.Contains(s)))
-                            continue;
-                        //LogHelper.SendLog($"subPath ({subPath}) is not rejected", LogLevel.DEVD);
+                if (!ModsToCheck.Any(s => subPath.Contains(s)))
+                    continue;
 
-                        if (!path.Contains(EnvPath.kCacheDataPath))
-                        {
-                            //LogHelper.SendLog(
-                            //    $"path {path} is not in EnvPath.kCacheDataPath",
-                            //    LogLevel.DEVD
-                            //);
-                            continue;
-                        }
+                if (!path.Contains(EnvPath.kCacheDataPath))
+                    continue;
 
-                        //LogHelper.SendLog(
-                        //    $"Searching for original of {prefabBase.name}",
-                        //    LogLevel.DEVD
-                        //);
-                        if (PrefabHelper.TryGetOriginal(prefabBase, out noModPb) && noModPb != null)
-                        {
-                            //LogHelper.SendLog(
-                            //    $"Original of {prefabBase.name} found",
-                            //    LogLevel.DEVD
-                            //);
-                            compPrefabBase = noModPb;
-                        }
+                if (
+                    PrefabHelper.TryGetOriginal(prefabBase, out PrefabBase? noModPb)
+                    && noModPb != null
+                )
+                    compPrefabBase = noModPb;
 
-                        if (noModPb == null)
-                        {
-                            //LogHelper.SendLog($"of {prefabBase.name} is null", LogLevel.DEVD);
-                            continue;
-                        }
+                if (noModPb == null)
+                    continue;
 
-                        //LogHelper.SendLog($"continuing...", LogLevel.DEVD);
+                string modText = subPath.Split("/")[1];
+                sourceId = modText.Split("_")[0];
+                sourceVersion = modText.Split("_")[1];
 
-                        string modText = subPath.Split("/")[1];
-                        sourceId = modText.Split("_")[0];
-                        sourceVersion = modText.Split("_")[1];
-                        source = "Mod";
-                    }
+                if (prefabBase.asset.id.guid != null)
+                    guid = prefabBase.asset.id.guid.ToString();
 
-                    if (prefabBase.asset.id.guid != null)
-                        guid = prefabBase.asset.id.guid.ToString();
-                }
-
-                if (subPath == "")
-                {
-                    source = "Game";
-                    sourceId = "Game";
-                }
-                //LogHelper.SendLog($"item: {prefabBase.name}", LogLevel.DEVD);
-
-                path = path.Replace(EnvPath.kCacheDataPath, "<m>")
-                    .Replace(EnvPath.kContentPath, "<c>");
-
-                if (subPath == "" && compPrefabBase.TryGet(out ContentPrerequisite cp))
-                {
-                    source = "DLC";
-                    sourceId = cp.m_ContentPrerequisite.name;
-                }
-                sourceVersion = dlcVersions.ContainsKey(sourceId)
-                    ? dlcVersions[sourceId]
-                    : sourceVersion;
+                path = path.Replace($"{EnvPath.kCacheDataPath}/Mods/{subPath}", "<m>");
 
                 if (guid == string.Empty)
                     pmap.TryGetGuid(prefabBase, out guid);
 
                 string prefabType = prefabBase.GetType().Name;
 
-                GetLocalesToExtract(prefabBase, source, sourceId, sourceVersion, localesToExtract);
+                GetModLocalesToExtract(prefabBase, sourceId, sourceVersion, localesToExtract);
 
                 string sourceIdVersion = $"{sourceId}_{sourceVersion}";
 
                 if (ModsToReject.Contains(sourceIdVersion))
+                    continue;
+
+                if (compPrefabBase.components.Capacity != compPrefabBase.components.Count)
                 {
-                    //LogHelper.SendLog(
-                    //    $"sourceIdVersion ({sourceIdVersion}) is in ModsToReject",
-                    //    LogLevel.DEVD
-                    //);
+                    LogHelper.SendLog(
+                        $"{prefabType}:{prefabBase.name} has capacity {compPrefabBase.components.Capacity} but count {compPrefabBase.components.Count}. Rejecting..."
+                    );
+                    ModsToReject.Add(sourceIdVersion);
                     continue;
                 }
 
                 Dictionary<string, object> objects = new();
 
-                Dictionary<string, object?>? pData = DumpObject(compPrefabBase, sourceIdVersion);
+                Dictionary<string, object?>? pData = DumpObject(compPrefabBase);
                 if (pData == null)
-                {
-                    //LogHelper.SendLog($"pData (for {prefabBase.name}) is null", LogLevel.DEVD);
                     continue;
-                }
 
                 objects[prefabType] = pData;
 
                 foreach (ComponentBase item in compPrefabBase.components)
                 {
-                    Dictionary<string, object?>? compData = DumpObject(item, sourceIdVersion);
+                    Dictionary<string, object?>? compData = DumpObject(item);
                     if (compData == null)
                         continue;
 
@@ -308,7 +176,7 @@ namespace AssetDatabaseContributor.Systems
                 }
 
                 assetData.Add(
-                    new AssetDataExtract()
+                    new PrefabDataExtract()
                     {
                         PrefabType = prefabType,
                         Name = prefabBase.name,
@@ -316,28 +184,107 @@ namespace AssetDatabaseContributor.Systems
                         Components = objects,
                         SubPath = subPath,
                         Path = path,
-                        Source = source,
                         SourceId = sourceId,
                         SourceVersion = sourceVersion,
                     }
                 );
                 ModsAdded.Add($"{sourceId}_{sourceVersion}");
-                //sb.AppendLine($"{prefabType}:{prefabBase.name}");
-
-                //if (found == true)
-                //    i++;
-
-                //if (i >= 10)
-                //    break;
             }
+            #endregion prefab extraction
 
-            if (assetData.Count <= 0 && ImagesNeeded.Count <= 0)
+            #region map extraction
+            foreach (
+                MapMetadata mapMetadata in AssetDatabase.global.GetAssets<MapMetadata>(default)
+            )
+            {
+                if (mapMetadata == null)
+                    continue;
+
+                if (mapMetadata.target.mapData == null)
+                    continue;
+
+                if (mapMetadata.database is not AssetDatabase<ParadoxMods>)
+                    continue;
+
+                if (mapMetadata.isBuiltin)
+                    continue;
+
+                mapMetadata.target.metaData.Load();
+
+                if (mapMetadata.target.thumbnail == null)
+                    continue;
+
+                ImagesNeeded.Add(mapMetadata.target.thumbnail.ToUri());
+                ImagesNeeded.Add(mapMetadata.target.preview.ToUri());
+
+                string subPath = string.Empty;
+                string path = string.Empty;
+                string guid = string.Empty;
+                string guidMeta = string.Empty;
+
+                string sourceId = "";
+                string sourceVersion = "";
+
+                if (mapMetadata.subPath != null)
+                    subPath = mapMetadata.subPath;
+
+                if (mapMetadata.path != null)
+                    path = mapMetadata.path;
+
+                if (!ModsToCheck.Any(s => subPath.Contains(s)))
+                    continue;
+
+                if (!path.Contains(EnvPath.kCacheDataPath))
+                    continue;
+
+                string modText = subPath.Split("/")[1];
+                sourceId = modText.Split("_")[0];
+                sourceVersion = modText.Split("_")[1];
+
+                string sourceIdVersion = $"{sourceId}_{sourceVersion}";
+                if (ModsToReject.Contains(sourceIdVersion))
+                    continue;
+
+                if (mapMetadata.id.guid != null)
+                    guid = mapMetadata.target.mapData.id.guid.ToString();
+                if (mapMetadata.id.guid != null)
+                    guidMeta = mapMetadata.id.guid.ToString();
+
+                path = path.Replace(EnvPath.kCacheDataPath, "<m>");
+
+                GetMapLocalesToExtract(
+                    mapMetadata.target.displayName,
+                    sourceId,
+                    sourceVersion,
+                    localesToExtract
+                );
+
+                mapDataExtracts.Add(
+                    new MapDataExtract()
+                    {
+                        Name = mapMetadata.target.displayName,
+                        GUID = guid,
+                        GUIDMeta = guidMeta,
+                        SubPath = subPath,
+                        Path = path,
+                        SourceId = sourceId,
+                        SourceVersion = sourceVersion,
+                        Metadata = mapMetadata.target,
+                    }
+                );
+                ModsAdded.Add(sourceIdVersion);
+            }
+            #endregion map extraction
+
+
+            if (assetData.Count <= 0 && mapDataExtracts.Count <= 0 && ImagesNeeded.Count <= 0)
             {
                 LogHelper.SendLog($"Nothing to collect", LogLevel.DEVD);
                 return;
             }
 
             LogHelper.SendLog($"{assetData.Count} assets logged", LogLevel.DEVD);
+            LogHelper.SendLog($"{mapDataExtracts.Count} map data logged", LogLevel.DEVD);
             LogHelper.SendLog($"{ImagesNeeded.Count} icons needed", LogLevel.DEVD);
 
             string baseDirectory = $"{Mod.DataDir}\\~Extracted";
@@ -345,269 +292,373 @@ namespace AssetDatabaseContributor.Systems
 
             LogHelper.SendLog($"Sorting...", LogLevel.DEVD);
 
-            List<AssetDataExtract>? items = assetData
+            List<PrefabDataExtract>? prefabItems = assetData
+                .Where(x => !ModsToReject.Contains($"{x.SourceId}_{x.SourceVersion}"))
+                .OrderBy(x => x.Name ?? string.Empty)
+                .ThenBy(x => x.GUID ?? string.Empty)
+                .ToList();
+            List<MapDataExtract>? items = mapDataExtracts
+                .Where(x => !ModsToReject.Contains($"{x.SourceId}_{x.SourceVersion}"))
                 .OrderBy(x => x.Name ?? string.Empty)
                 .ThenBy(x => x.GUID ?? string.Empty)
                 .ToList();
 
             LogHelper.SendLog(
-                $"Starting writing to zip files for {items.Count} items...",
+                $"Starting writing to package files for {prefabItems.Count} prefabs and {items.Count} maps...",
                 LogLevel.DEVD
             );
 
-            foreach (var sourceGroup in items.GroupBy(x => x.Source))
+            var mapsByKey = items
+                .GroupBy(x => (x.SourceId, x.SourceVersion))
+                .ToDictionary(g => g.Key, g => g.ToList());
+
+            var processedKeys = new HashSet<(string SourceId, string SourceVersion)>();
+
+            #region processor method
+            void ProcessKey(
+                string sourceId,
+                string sourceVersion,
+                List<PrefabDataExtract> prefabsForKey
+            )
             {
-                var source = sourceGroup.Key;
+                LogHelper.SendLog(
+                    $"==================================================",
+                    LogLevel.DEVD
+                );
+                LogHelper.SendLog(
+                    $"Packaging for Mod/{sourceId}/{sourceVersion}...",
+                    LogLevel.DEVD
+                );
 
-                foreach (var sourceIdGroup in sourceGroup.GroupBy(x => x.SourceId))
+                List<PrefabRow> prefabs = new();
+                List<ComponentRow> components = new();
+
+                int componentCount = 0;
+                foreach (PrefabDataExtract item in prefabsForKey)
                 {
-                    var sourceId = sourceIdGroup.Key;
+                    prefabs.Add(
+                        new PrefabRow
+                        {
+                            GUID = item.GUID,
+                            Name = item.Name,
+                            PrefabType = item.PrefabType,
+                            SubPath = item.SubPath,
+                            Path = item.Path,
+                        }
+                    );
 
-                    foreach (var versionGroup in sourceIdGroup.GroupBy(x => x.SourceVersion))
+                    foreach (var comp in item.Components)
                     {
-                        var sourceVersion = versionGroup.Key;
+                        var attrVal = JsonConvert.SerializeObject(comp.Value, GetJsonSetting());
 
-                        LogHelper.SendLog(
-                            $"==================================================",
-                            LogLevel.DEVD
-                        );
-                        LogHelper.SendLog(
-                            $"Zipping for {source}/{sourceId}/{sourceVersion}...",
-                            LogLevel.DEVD
-                        );
-
-                        List<PrefabRow> prefabs = new();
-                        List<ComponentRow> components = new();
-
-                        int c = 0;
-                        foreach (AssetDataExtract item in versionGroup)
-                        {
-                            prefabs.Add(
-                                new PrefabRow
-                                {
-                                    guid = item.GUID,
-                                    name = item.Name,
-                                    prefab_type = item.PrefabType,
-                                    sub_path = item.SubPath,
-                                    path = item.Path,
-                                }
-                            );
-
-                            foreach (var comp in item.Components)
+                        componentCount++;
+                        components.Add(
+                            new ComponentRow
                             {
-                                var attrVal = JsonConvert.SerializeObject(
-                                    comp.Value,
-                                    GetJsonSetting()
-                                );
-
-                                //if (item.GUID.ToString() == "39980c750d4c50b4ea7a7477b0411513")
-                                //{
-                                //    try
-                                //    {
-                                //        LogHelper.SendLog(comp.Value.ToString());
-                                //    }
-                                //    catch { }
-                                //    LogHelper.SendLog(attrVal);
-                                //}
-
-                                c++;
-                                components.Add(
-                                    new ComponentRow
-                                    {
-                                        guid = item.GUID,
-                                        attr_id = comp.Key,
-                                        attr_value = attrVal,
-                                    }
-                                );
+                                GUID = item.GUID,
+                                AttrID = comp.Key,
+                                AttrValue = attrVal,
                             }
-                        }
-
-                        string zipPath = Path.Combine(
-                            baseDirectory,
-                            $"~ADC_{timeNow}_{source}_{sourceId}_{sourceVersion}.zip"
                         );
+                    }
+                }
 
-                        using ZipArchive archive = ZipFile.Open(zipPath, ZipArchiveMode.Create);
+                string zipPath = Path.Combine(
+                    baseDirectory,
+                    $"~{timeNow}_Mod_{sourceId}_{sourceVersion}.adc"
+                );
 
-                        var entry = archive.CreateEntry(
-                            "prefabs.tsv",
-                            System.IO.Compression.CompressionLevel.Optimal
+                using ZipArchive archive = ZipFile.Open(zipPath, ZipArchiveMode.Create);
+
+                if (prefabsForKey.Count > 0)
+                {
+                    var entry = archive.CreateEntry(
+                        "prefabs.tsv",
+                        System.IO.Compression.CompressionLevel.Optimal
+                    );
+
+                    using (var writer = new StreamWriter(entry.Open(), new UTF8Encoding(false)))
+                    {
+                        writer.Write(CSV.Serialize(prefabs, GetCSVSetting()));
+                    }
+
+                    entry = archive.CreateEntry(
+                        "components.tsv",
+                        System.IO.Compression.CompressionLevel.Optimal
+                    );
+                    using (var writer = new StreamWriter(entry.Open(), new UTF8Encoding(false)))
+                    {
+                        writer.Write(CSV.Serialize(components, GetCSVSetting()));
+                    }
+
+                    LogHelper.SendLog(
+                        $"Wrote {prefabsForKey.Count} prefabs to 'prefabs.tsv'",
+                        LogLevel.DEVD
+                    );
+                    LogHelper.SendLog(
+                        $"Wrote {componentCount} components to 'components.tsv'",
+                        LogLevel.DEVD
+                    );
+                }
+
+                if (mapsByKey.TryGetValue((sourceId, sourceVersion), out var mapsForThisKey))
+                {
+                    List<MapDataRow> mapDatas = new();
+                    foreach (MapDataExtract item in mapsForThisKey)
+                    {
+                        MapInfo metadata = item.Metadata;
+
+                        if (
+                            !AssetHelper.TryGetAssetGUID(
+                                metadata.thumbnail.ToUri(),
+                                out string thumbGUID
+                            )
+                        )
+                            continue;
+                        if (
+                            !AssetHelper.TryGetAssetGUID(
+                                metadata.preview.ToUri(),
+                                out string prevGUID
+                            )
+                        )
+                            continue;
+
+                        mapDatas.Add(
+                            new MapDataRow
+                            {
+                                GUID = item.GUID,
+                                MetadataGUID = item.GUIDMeta,
+                                ThumbnailGUID = thumbGUID,
+                                PreviewGUID = prevGUID,
+                                Name = item.Name,
+                                SubPath = item.SubPath,
+                                Path = item.Path,
+                                Theme = metadata.theme,
+                                TempMin = metadata.temperatureRange.min,
+                                TempMax = metadata.temperatureRange.max,
+                                Cloudiness = metadata.cloudiness,
+                                Precipitation = metadata.precipitation,
+                                Latitude = metadata.latitude,
+                                Longitude = metadata.longitude,
+                                BuildableLand = metadata.buildableLand,
+                                Area = metadata.area,
+                                SurfaceWaterAvailability = metadata.surfaceWaterAvailability,
+                                GroundWaterAvailability = metadata.groundWaterAvailability,
+                                ResFertile = metadata.resources.fertile,
+                                ResForest = metadata.resources.forest,
+                                ResOil = metadata.resources.oil,
+                                ResOre = metadata.resources.ore,
+                                ResFish = metadata.resources.fish,
+                                ConnRoad = metadata.connections.road ? 1 : 0,
+                                ConnTrain = metadata.connections.train ? 1 : 0,
+                                ConnAir = metadata.connections.air ? 1 : 0,
+                                ConnShip = metadata.connections.ship ? 1 : 0,
+                                ConnElectricity = metadata.connections.electricity ? 1 : 0,
+                                ConnWater = metadata.connections.water ? 1 : 0,
+                                ContentPrerequisites =
+                                    metadata.contentPrerequisites != null
+                                        ? string.Join(",", metadata.contentPrerequisites)
+                                        : string.Empty,
+                                NameAsCityName = metadata.nameAsCityName ? 1 : 0,
+                                StartingYear = metadata.startingYear,
+                            }
                         );
+                    }
 
-                        using (var writer = new StreamWriter(entry.Open(), new UTF8Encoding(false)))
+                    var mapEntry = archive.CreateEntry(
+                        "maps.tsv",
+                        System.IO.Compression.CompressionLevel.Optimal
+                    );
+                    using (var writer = new StreamWriter(mapEntry.Open(), new UTF8Encoding(false)))
+                        writer.Write(CSV.Serialize(mapDatas, GetCSVSetting()));
+
+                    LogHelper.SendLog($"Wrote {mapDatas.Count} maps to 'maps.tsv'", LogLevel.DEVD);
+                }
+
+                #region locale zipping
+                HashSet<LocaleRowData> localeData = new();
+                Dictionary<string, List<LocaleAsset>> assetsByLocale = new();
+                foreach (LocaleAsset asset in AssetDatabase.global.GetAssets<LocaleAsset>(default))
+                {
+                    string id = asset.localeId;
+                    if (id == null)
+                        continue;
+                    if (!assetsByLocale.TryGetValue(id, out var list))
+                    {
+                        list = new List<LocaleAsset>();
+                        assetsByLocale[id] = list;
+                    }
+                    list.Add(asset);
+                }
+
+                if (
+                    localesToExtract.TryGetValue((sourceId, sourceVersion), out var localesToExport)
+                )
+                {
+                    foreach (var (lang, assets) in assetsByLocale)
+                    {
+                        Dictionary<string, string> rawEntries = new(StringComparer.Ordinal);
+                        Dictionary<string, int> indexCounts = new(StringComparer.Ordinal);
+                        List<IDictionaryEntryError> errors = new();
+
+                        foreach (LocaleAsset asset in assets)
                         {
-                            writer.Write(CSV.Serialize(prefabs, GetCSVSetting()));
-                        }
-
-                        entry = archive.CreateEntry(
-                            "components.tsv",
-                            System.IO.Compression.CompressionLevel.Optimal
-                        );
-                        using (var writer = new StreamWriter(entry.Open(), new UTF8Encoding(false)))
-                        {
-                            writer.Write(CSV.Serialize(components, GetCSVSetting()));
-                        }
-
-                        LogHelper.SendLog(
-                            $"Wrote {versionGroup.Count()} prefabs to 'prefabs.tsv'",
-                            LogLevel.DEVD
-                        );
-                        LogHelper.SendLog(
-                            $"Wrote {c} components to 'components.tsv'",
-                            LogLevel.DEVD
-                        );
-
-                        #region locale extraction
-                        LocalizationManager locMan = LocaleHelper.localizationManager;
-
-                        HashSet<LocaleData> localeData = new();
-                        string currentLang = locMan.activeLocaleId;
-                        foreach (string lang in locMan.GetSupportedLocales())
-                        {
-                            locMan?.SetActiveLocale(lang);
-
-                            if (
-                                localesToExtract.TryGetValue(
-                                    (source, sourceId, sourceVersion),
-                                    out var localesToExport
+                            foreach (
+                                KeyValuePair<string, string> kv in asset.ReadEntries(
+                                    errors,
+                                    indexCounts
                                 )
                             )
-                            {
-                                foreach ((string prefix, string key) in localesToExport)
-                                {
-                                    string getId = $"{prefix}[{key}]";
-                                    if (
-                                        locMan?.activeDictionary?.TryGetValue(
-                                            getId,
-                                            out string result
-                                        ) == true
-                                        && (result != getId)
-                                    )
-                                    {
-                                        localeData.Add(
-                                            new LocaleData()
-                                            {
-                                                Prefix = GetLocalePrefixId(prefix),
-                                                Name = key,
-                                                Lang = lang,
-                                                Text = result,
-                                            }
-                                        );
-                                    }
-                                }
-                            }
+                                rawEntries[kv.Key] = kv.Value;
                         }
 
-                        locMan?.SetActiveLocale(currentLang);
-
-                        if (localeData.Count > 0)
+                        foreach ((string prefix, string key) in localesToExport)
                         {
-                            using StreamWriter wrt_loc = new(
-                                archive
-                                    .CreateEntry(
-                                        "locale.tsv",
-                                        System.IO.Compression.CompressionLevel.Optimal
-                                    )
-                                    .Open()
-                            );
-
-                            IOrderedEnumerable<LocaleData> sorted = localeData
-                                .OrderBy(x => x.Name)
-                                .ThenBy(x => x.Prefix)
-                                .ThenBy(x => x.Lang)
-                                .ThenBy(x => x.Text);
-
-                            List<LocaleRow> localeRows = new();
-                            foreach (var row in sorted)
+                            string getId = $"{prefix}[{key}]";
+                            if (rawEntries.TryGetValue(getId, out string result) && result != getId)
                             {
-                                localeRows.Add(
-                                    new LocaleRow
+                                localeData.Add(
+                                    new LocaleRowData()
                                     {
-                                        prefix = row.Prefix,
-                                        name = row.Name,
-                                        lang = row.Lang,
-                                        text = row.Text,
+                                        Prefix = GetLocalePrefixId(prefix),
+                                        Name = key,
+                                        Lang = lang,
+                                        Text = result,
                                     }
                                 );
                             }
-
-                            wrt_loc.Write(CSV.Serialize(localeRows, GetCSVSetting()));
-
-                            LogHelper.SendLog(
-                                $"Wrote {localeData.Count()} locale entries to 'locale.tsv'",
-                                LogLevel.DEVD
-                            );
                         }
-
-                        #endregion locale extraction
                     }
+                }
+
+                if (localeData.Count > 0)
+                {
+                    using StreamWriter wrt_loc = new(
+                        archive
+                            .CreateEntry(
+                                "locale.tsv",
+                                System.IO.Compression.CompressionLevel.Optimal
+                            )
+                            .Open()
+                    );
+
+                    IOrderedEnumerable<LocaleRowData> sorted = localeData
+                        .OrderBy(x => x.Name)
+                        .ThenBy(x => x.Prefix)
+                        .ThenBy(x => x.Lang)
+                        .ThenBy(x => x.Text);
+
+                    List<LocaleRow> localeRows = new();
+                    foreach (var row in sorted)
+                    {
+                        localeRows.Add(
+                            new LocaleRow
+                            {
+                                Prefix = row.Prefix,
+                                Name = row.Name,
+                                Lang = row.Lang,
+                                Text = row.Text,
+                            }
+                        );
+                    }
+
+                    wrt_loc.Write(CSV.Serialize(localeRows, GetCSVSetting()));
+
+                    LogHelper.SendLog(
+                        $"Wrote {localeData.Count()} locale entries to 'locale.tsv'",
+                        LogLevel.DEVD
+                    );
+                }
+
+                #endregion locale extraction
+                processedKeys.Add((sourceId, sourceVersion));
+            }
+            #endregion processor method
+
+
+            foreach (var sourceIdGroup in prefabItems.GroupBy(x => x.SourceId))
+            {
+                foreach (var versionGroup in sourceIdGroup.GroupBy(x => x.SourceVersion))
+                {
+                    ProcessKey(sourceIdGroup.Key, versionGroup.Key, versionGroup.ToList());
                 }
             }
 
-            //#region comp_attr extraction
-            //ValidateComponentLib();
-            //if (ComponentLib.Count > 0)
-            //{
-            //    LogHelper.SendLog(
-            //        $"==================================================",
-            //        LogLevel.DEVD
-            //    );
-            //    string zipPath = Path.Combine(baseDirectory, $"~ADC_{timeNow}_compAttr.zip");
-            //    using ZipArchive archive = ZipFile.Open(zipPath, ZipArchiveMode.Create);
+            foreach (var key in mapsByKey.Keys)
+            {
+                if (processedKeys.Contains(key))
+                    continue;
 
-            //    using StreamWriter wrt_ca = new(
-            //        archive
-            //            .CreateEntry(
-            //                "components_attr.tsv",
-            //                System.IO.Compression.CompressionLevel.Optimal
-            //            )
-            //            .Open()
-            //    );
+                ProcessKey(key.SourceId, key.SourceVersion, new List<PrefabDataExtract>());
+            }
 
-            //    var sorted = ComponentLib
-            //        .OrderBy(x => x.comp)
-            //        .ThenBy(x => x.index)
-            //        .ThenBy(x => x.attr)
-            //        .ThenBy(x => x.type);
+            #region comp_attr extraction
+            if (ComponentLib.Count > 0)
+            {
+                var newOrUpdated = ComponentLib.Except(BaseComponent).ToList();
 
-            //    List<ComponentAttributeRow> componentAttributeRow = new();
-            //    foreach (var (index, comp, attr, type, note) in sorted)
-            //    {
-            //        componentAttributeRow.Add(
-            //            new ComponentAttributeRow
-            //            {
-            //                comp_name = comp,
-            //                index = index,
-            //                attr_name = attr,
-            //                attr_type = type,
-            //                note = note,
-            //            }
-            //        );
-            //    }
+                if (newOrUpdated.Count == 0)
+                {
+                    LogHelper.SendLog(
+                        "No new or updated components found; skipping CSV write.",
+                        LogLevel.DEVD
+                    );
+                }
+                else
+                {
+                    LogHelper.SendLog(
+                        $"==================================================",
+                        LogLevel.DEVD
+                    );
+                    string zipPath = Path.Combine(baseDirectory, $"~{timeNow}_compAttr.adc");
+                    using ZipArchive archive = ZipFile.Open(zipPath, ZipArchiveMode.Create);
 
-            //    wrt_ca.Write(CSV.Serialize(componentAttributeRow, GetCSVSetting()));
+                    using StreamWriter wrt_ca = new(
+                        archive
+                            .CreateEntry(
+                                "components_attr.tsv",
+                                System.IO.Compression.CompressionLevel.Optimal
+                            )
+                            .Open()
+                    );
 
-            //    //foreach (var (index, comp, attr, type, note) in sorted)
-            //    //{
-            //    //    wrt_ca.Write(
-            //    //        new object[] { comp, index, attr, type, note }.ToCSVString(GetCSVSetting())
-            //    //    );
-            //    //}
+                    var sorted = newOrUpdated
+                        .OrderBy(x => x.source)
+                        .ThenBy(x => x.comp)
+                        .ThenBy(x => x.index)
+                        .ThenBy(x => x.attr)
+                        .ThenBy(x => x.type);
 
-            //    LogHelper.SendLog(
-            //        $"Wrote {ComponentLib.Count()} component attributes to 'components_attr.tsv'",
-            //        LogLevel.DEVD
-            //    );
-            //}
-            //#endregion comp_attr extraction
+                    List<ComponentAttributeRow> componentAttributeRow = new();
+                    foreach (var (index, comp, attr, type, note, source) in sorted)
+                    {
+                        componentAttributeRow.Add(
+                            new ComponentAttributeRow
+                            {
+                                CompName = comp,
+                                Index = index,
+                                AttrName = attr,
+                                AttrType = type,
+                                Note = note,
+                                Source = source,
+                            }
+                        );
+                    }
+
+                    wrt_ca.Write(CSV.Serialize(componentAttributeRow, GetCSVSetting()));
+
+                    LogHelper.SendLog(
+                        $"Wrote {componentAttributeRow.Count} component attributes to 'components_attr.tsv'",
+                        LogLevel.DEVD
+                    );
+                }
+            }
+            #endregion comp_attr extraction
 
             LogHelper.SendLog($"==================================================", LogLevel.DEVD);
         }
 
-        public static Dictionary<string, object?>? DumpObject(
-            ComponentBase obj,
-            string sourceIdVersion
-        )
+        public static Dictionary<string, object?>? DumpObject(ComponentBase obj)
         {
             Dictionary<string, object?>? result = new() { };
 
@@ -621,24 +672,25 @@ namespace AssetDatabaseContributor.Systems
 
             Type type = obj.GetType();
 
-            bool valid = IsValidComponent(type.Name);
-            if (!valid)
-            {
-                ModsToReject.Add(sourceIdVersion);
-                LogHelper.SendLog(
-                    $"{sourceIdVersion} got rejected because it contains {type.Name} component"
-                );
-                return null;
-            }
-
-            ComponentLib.Add((i++, type.Name, "", "", ""));
+            ComponentLib.Add(
+                (i++, type.Name, "", "", "", type.Assembly.GetName().Name ?? "Unknown")
+            );
             foreach (FieldInfo field in type.GetFields(flags))
             {
                 if (field.Name is "active" or "version" or "components" or "isDirty")
                     continue;
 
                 string note = field.GetCustomAttribute<TooltipAttribute>()?.tooltip ?? "";
-                ComponentLib.Add((i++, type.Name, field.Name, field.FieldType.ToString(), note));
+                ComponentLib.Add(
+                    (
+                        i++,
+                        type.Name,
+                        field.Name,
+                        field.FieldType.ToString(),
+                        note,
+                        field.DeclaringType?.Assembly.GetName().Name ?? "Unknown"
+                    )
+                );
 
                 try
                 {
@@ -672,13 +724,16 @@ namespace AssetDatabaseContributor.Systems
                 return null;
             }
 
+            if (value is IntPtr or UIntPtr)
+                return "<IntPtr>";
+
             if (value is PrefabBase prefab)
             {
                 if (AssetDatabase.global.resources.prefabsMap.TryGetGuid(prefab, out string id))
-                    return $"GUID:{id}";
+                    return $"{id}";
 
                 if (prefab.asset != null)
-                    return $"CID:{prefab.asset.id.guid}";
+                    return $"{prefab.asset.id.guid}";
 
                 return $"<{prefab.GetType().Name}:{prefab.name}>";
             }
@@ -691,7 +746,7 @@ namespace AssetDatabaseContributor.Systems
                         out string guid
                     )
                 )
-                    return $"UOM:{guid}";
+                    return $"{guid}";
 
                 if (AssetDatabase.global.resources.unityObjectsMap)
                     return $"<{unityObj.GetType().Name}>";

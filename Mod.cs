@@ -1,5 +1,7 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using AssetDatabaseContributor.Systems;
 using Colossal.IO.AssetDatabase;
 using Game;
@@ -28,6 +30,8 @@ namespace AssetDatabaseContributor
 
             Directory.CreateDirectory(DataDir);
 
+            RemoveOutdatedVersions();
+
             WorldHelper.GetSystem<StartupSystem>();
             //LogHelper.SendLog(
             //    "Mod temporarily disabled while shenenigans are being solved. You don't have to do anything."
@@ -44,6 +48,54 @@ namespace AssetDatabaseContributor
         public static Dictionary<string, string> GetReplacements()
         {
             return new() { };
+        }
+
+        public static void RemoveOutdatedVersions()
+        {
+            string[] validFilenames = new[]
+            {
+                $"ComponentData_v{StartupSystem.CurrentComponentDataVersion}.ADC_json",
+                $"SourceData_v{StartupSystem.CurrentSourceDataVersion}.ADC_json",
+                $"SourceData_v{StartupSystem.CurrentSourceDataVersion}_debug.ADC_json",
+            };
+
+            if (!Directory.Exists(DataDir))
+                return;
+
+            HashSet<string> validFiles = new(validFilenames, StringComparer.OrdinalIgnoreCase);
+
+            IEnumerable<string> files = Directory
+                .EnumerateFiles(DataDir)
+                .Where(file =>
+                {
+                    var name = Path.GetFileName(file);
+
+                    return (
+                            name.StartsWith("SourceData_v", StringComparison.OrdinalIgnoreCase)
+                            || name.StartsWith(
+                                "ComponentData_v",
+                                StringComparison.OrdinalIgnoreCase
+                            )
+                        ) && name.EndsWith(".ADC_json", StringComparison.OrdinalIgnoreCase);
+                });
+
+            foreach (string file in files)
+            {
+                string filename = Path.GetFileName(file);
+
+                if (validFiles.Contains(filename))
+                    continue;
+
+                try
+                {
+                    LogHelper.SendLog($"Deleting outdated file '{file}'");
+                    File.Delete(file);
+                }
+                catch (Exception ex)
+                {
+                    LogHelper.SendLog($"Failed to delete outdated SourceData file '{file}': {ex}");
+                }
+            }
         }
     }
 }

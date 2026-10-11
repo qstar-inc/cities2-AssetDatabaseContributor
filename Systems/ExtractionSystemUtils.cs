@@ -1,65 +1,81 @@
 ﻿using System.Collections.Generic;
-using System.IO;
-using System.IO.Compression;
-using System.Linq;
-using System.Reflection;
 using Colossal.IO.AssetDatabase;
-using Colossal.PSI.Common;
 using CSVFile;
 using Game;
 using Game.Prefabs;
+using Newtonsoft.Json;
 using StarQ.Shared.Extensions;
 
 namespace AssetDatabaseContributor.Systems
 {
     public partial class ExtractionSystem : GameSystemBase
     {
-        private static HashSet<(
+        internal static HashSet<(
             int index,
             string comp,
             string attr,
             string type,
-            string note
+            string note,
+            string source
         )> ComponentLib { get; set; } = new();
 
-        private readonly Dictionary<string, string> dlcVersions = new();
+        internal static HashSet<(
+            int index,
+            string comp,
+            string attr,
+            string type,
+            string note,
+            string source
+        )> BaseComponent { get; set; } = new();
 
         internal static readonly HashSet<string> ImagesNeeded = new();
-
         internal static HashSet<string> ModsToCheck = new();
         internal static HashSet<string> ModsToReject = new();
         internal static HashSet<string> ModsAdded = new();
-        public static List<string> ValidComponents = new();
 
         public static FileSystemDataSource.PathEscapePolicy kPathEscapePolicy = new();
 
-        public static bool IsValidComponent(string typeName) => ValidComponents.Contains(typeName);
-
-        private void GetDLCVersions()
+        internal static JsonSerializerSettings GetJsonSetting()
         {
-            dlcVersions.Clear();
-            using IEnumerator<IDlc> enumerator2 = PlatformManager
-                .instance.EnumerateLocalDLCs()
-                .GetEnumerator();
-            while (enumerator2.MoveNext())
+            JsonSerializerSettings settings = new()
             {
-                IDlc dlc = enumerator2.Current;
-                dlcVersions[dlc.internalName] = dlc.version.shortVersion;
-            }
+                Formatting = Formatting.None,
+                NullValueHandling = NullValueHandling.Ignore,
+                Error = (sender, args) =>
+                {
+                    LogHelper.SendLog(
+                        $"Serialization error on property '{args.ErrorContext.Member}': {args.ErrorContext.Error.Message}"
+                    );
+                    args.ErrorContext.Handled = true;
+                },
+            };
+            return settings;
         }
 
-        private void GetLocalesToExtract(
+        internal static CSVSettings GetCSVSetting()
+        {
+            CSVSettings settings = new()
+            {
+                FieldDelimiter = '\t',
+                TextQualifier = '~',
+                LineSeparator = "\n",
+                HeaderRowIncluded = true,
+                ForceQualifiers = false,
+            };
+            return settings;
+        }
+
+        private void GetModLocalesToExtract(
             PrefabBase prefabBase,
-            string source,
             string sourceId,
             string sourceVersion,
             Dictionary<
-                (string Source, string SourceId, string SourceVersion),
+                (string SourceId, string SourceVersion),
                 List<(string Prefix, string Key)>
             > localesToExtract
         )
         {
-            var key = (source, sourceId, sourceVersion);
+            var key = (sourceId, sourceVersion);
 
             if (!localesToExtract.TryGetValue(key, out var list))
             {
@@ -89,6 +105,31 @@ namespace AssetDatabaseContributor.Systems
             }
         }
 
+        private void GetMapLocalesToExtract(
+            string identification,
+            string sourceId,
+            string sourceVersion,
+            Dictionary<
+                (string SourceId, string SourceVersion),
+                List<(string Prefix, string Key)>
+            > localesToExtract
+        )
+        {
+            var key = (sourceId, sourceVersion);
+
+            if (!localesToExtract.TryGetValue(key, out var list))
+            {
+                list = new List<(string Prefix, string Key)>();
+                localesToExtract[key] = list;
+            }
+
+            if (identification != null)
+            {
+                list.Add(("Maps.MAP_TITLE", identification));
+                list.Add(("Maps.MAP_DESCRIPTION", identification));
+            }
+        }
+
         private static int GetLocalePrefixId(string prefix)
         {
             return prefix switch
@@ -101,80 +142,47 @@ namespace AssetDatabaseContributor.Systems
                 "Services.DESCRIPTION" => 6,
                 "SubServices.NAME" => 7,
                 "Assets.SUB_SERVICE_DESCRIPTION" => 8,
+                "Maps.MAP_TITLE" => 9,
+                "Maps.MAP_DESCRIPTION" => 10,
                 _ => 0,
             };
         }
 
-        private void LoadExistingComponentLib()
-        {
-            Assembly? assembly = ModHelper.GetModExecutable(Mod.Id)?.assembly;
-
-            if (assembly == null)
-            {
-                LogHelper.SendLog("Something went wrong, could not find own assembly");
-                return;
-            }
-
-            using Stream resource = assembly.GetManifestResourceStream(
-                $"{Mod.Id}.EmbedCustom.components_attr.tsv.gz"
-            );
-
-            if (resource == null)
-            {
-                LogHelper.SendLog("Something went wrong, could not find own embedded TSV");
-                return;
-            }
-
-            using GZipStream gzip = new(resource, CompressionMode.Decompress);
-            using StreamReader streamReader = new(gzip);
-            using CSVReader reader = new(streamReader, GetCSVSetting());
-
-            List<ComponentAttributeRow> rows = reader.Deserialize<ComponentAttributeRow>();
-            HashSet<string> validComps = new();
-
-            foreach (ComponentAttributeRow row in rows)
-                validComps.Add(row.comp_name);
-
-            ValidComponents = validComps.ToList();
-        }
-
-        //public void TestPrefabs()
+        //private void LoadExistingComponentLib()
         //{
-        //    WorldHelper.PrefabSystem.TryGetPrefab(
-        //        new PrefabID(
-        //            nameof(TrackPrefab),
-        //            "W7Double Train Track - Station Middle",
-        //            Colossal.Hash128.Parse("b1fe85b77295966146e41d9f6da6fe65")
-        //        ),
-        //        out PrefabBase pb
-        //    );
+        //    BaselineLib.Clear();
+        //    ComponentLib.Clear();
+        //    Assembly? assembly = ModHelper.GetModExecutable(Mod.Id)?.assembly;
 
-        //    if (!PrefabHelper.TryGetOriginal(pb, out PrefabBase original))
+        //    if (assembly == null)
         //    {
-        //        LogHelper.SendLog("so is null");
+        //        LogHelper.SendLog("Something went wrong, could not find own assembly");
         //        return;
         //    }
 
-        //    if (original.GetType() == pb.GetType())
+        //    using Stream resource = assembly.GetManifestResourceStream(
+        //        $"{Mod.Id}.EmbedCustom.components_attr.tsv.gz"
+        //    );
+
+        //    if (resource == null)
         //    {
-        //        if (pb.TryGet(out UIObject uio))
-        //            LogHelper.SendLog($"UIO Icon is {uio.m_Icon}");
-        //        else
-        //            LogHelper.SendLog($"No UIO Icon in pb");
-        //        if (original.TryGet(out UIObject uio2))
-        //            LogHelper.SendLog($"UIO Icon is {uio2.m_Icon}");
-        //        else
-        //            LogHelper.SendLog($"No UIO Icon in so");
+        //        LogHelper.SendLog("Something went wrong, could not find own embedded TSV");
+        //        return;
         //    }
 
-        //    if (pb.asset == original.asset)
-        //        LogHelper.SendLog("pb.asset == original.asset");
-        //    else
-        //        LogHelper.SendLog("pb.asset != original.asset");
-        //    if (pb.components == original.components)
-        //        LogHelper.SendLog("pb.components == original.components");
-        //    else
-        //        LogHelper.SendLog("pb.components != original.components");
+        //    using GZipStream gzip = new(resource, CompressionMode.Decompress);
+        //    using StreamReader streamReader = new(gzip);
+        //    using CSVReader reader = new(streamReader, GetCSVSetting());
+
+        //    List<ComponentAttributeRow> rows = reader.Deserialize<ComponentAttributeRow>();
+        //    HashSet<(int, string, string, string, string, string)> baseline = new();
+
+        //    foreach (ComponentAttributeRow row in rows)
+        //        baseline.Add(
+        //            (row.Index, row.CompName, row.AttrName, row.AttrType, row.Note, row.Source)
+        //        );
+
+        //    BaselineLib = baseline;
         //}
     }
 }

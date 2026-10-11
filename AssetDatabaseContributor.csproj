@@ -2,28 +2,11 @@
   <PropertyGroup>
     <AssemblyName>AssetDatabaseContributor</AssemblyName>
     <AssemblyTitle>Asset Database Contributor</AssemblyTitle>
-    <Version>2.0.2</Version>
+    <Version>2.0.3</Version>
   </PropertyGroup>
   <Import Project="$([System.Environment]::GetEnvironmentVariable('CSII_TOOLPATH', 'EnvironmentVariableTarget.User'))\Mod.props" />
   <Import Project="$([System.Environment]::GetEnvironmentVariable('CSII_TOOLPATH', 'EnvironmentVariableTarget.User'))\Mod.targets" />
-  <Import Project="..\..\ModsPersonal\StarQ.Shared\StarQ.Shared.projitems" Label="Shared" />
-  <Import Project="..\..\ModsPersonal\StarQ.Shared\StarQ.Shared.props" />
-  <Import Project="..\..\ModsPersonal\StarQ.Shared\StarQ.Shared.targets" />
-
-  <ItemGroup>
-    <None Include="EmbedCustom\components_attr.tsv" />
-  </ItemGroup>
-
-  <Target
-    Name="CompressEmbeddedData"
-    BeforeTargets="BeforeBuild"
-    Inputs="EmbedCustom\components_attr.tsv"
-    Outputs="EmbedCustom\components_attr.tsv.gz"
-  >
-    <Exec Command="if exist &quot;EmbedCustom\components_attr.tsv.gz&quot; del /Q &quot;EmbedCustom\components_attr.tsv.gz&quot; &amp; &quot;C:\Program Files\7-Zip-Zstandard\7z.exe&quot; a -tgzip &quot;EmbedCustom\components_attr.tsv.gz&quot; &quot;EmbedCustom\components_attr.tsv&quot; -y" />
-  </Target>
-
-  <ItemGroup>
-    <EmbeddedResource Include="EmbedCustom\components_attr.tsv.gz" />
-  </ItemGroup>
+  <Import Project="$(CS2_STARQ_SHARED_PATH)\StarQ.Shared.projitems" Label="Shared" />
+  <Import Project="$(CS2_STARQ_SHARED_PATH)\StarQ.Shared.props" />
+  <Import Project="$(CS2_STARQ_SHARED_PATH)\StarQ.Shared.targets" />
 </Project>
