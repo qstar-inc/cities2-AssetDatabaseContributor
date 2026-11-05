@@ -1,4 +1,2 @@
-- Ensure all data values are culture invariant.
-- Add Code Version validation.
-- Fix bug that prevented file list for non code items to be ignored.
-- Fix bug that throw errors when a zip in access (maybe by third party antivirus) is being deleted.
+- Added more notification states.
+- Fix file list size too large (now chunked).

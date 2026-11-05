@@ -53,13 +53,11 @@ If you choose Public contribution, your user information (PDX Username and UserI
   <Screenshot Value="" />
   <Tag Value="Code Mod" />
   <ForumLink Value="https://forum.paradoxplaza.com/forum/threads/starq-mods-assets-projects-megathread.1930389/" />
-  <ModVersion Value="2.0.4" />
+  <ModVersion Value="2.0.5" />
   <GameVersion Value="1.6.2*" />
   <Dependency Id="79186" />
-  <ChangeLog>- Ensure all data values are culture invariant.
-- Add Code Version validation.
-- Fix bug that prevented file list for non code items to be ignored.
-- Fix bug that throw errors when a zip in access (maybe by third party antivirus) is being deleted.</ChangeLog>
+  <ChangeLog>- Added more notification states.
+- Fix file list size too large (now chunked).</ChangeLog>
   <ExternalLink Type="github" Url="https://github.com/qstar-inc/cities2-AssetDatabaseContributor" />
   <ExternalLink Type="discord" Url="https://discord.gg/U2PSjUzUuF" />
   <ExternalLink Type="buymeacoffee" Url="https://buymeacoffee.com/starq" />

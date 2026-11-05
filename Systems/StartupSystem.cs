@@ -577,6 +577,13 @@ namespace AssetDatabaseContributor.Systems
 
             CleanupFolders();
 
+            NotificationSystem.Push(
+                notifIdentifier,
+                title: Mod.Name,
+                text: LocaleHelper.Translate($"{notifIdentifier}.InitServer"),
+                progressState: ProgressState.Indeterminate
+            );
+
             string? since = null;
             DataCacheSource? cache = null;
 
@@ -652,6 +659,13 @@ namespace AssetDatabaseContributor.Systems
             }
 
             sourceDataDownload:
+            NotificationSystem.Push(
+                notifIdentifier,
+                title: Mod.Name,
+                text: LocaleHelper.Translate($"{notifIdentifier}.DownloadingNotRequired"),
+                progressState: ProgressState.Indeterminate
+            );
+
             string sourceDataUrl =
                 since != null
                     ? $"{ApiBase}/cs2db/source-data?since={since}"
@@ -815,6 +829,12 @@ namespace AssetDatabaseContributor.Systems
 
             File.WriteAllText(SourceDataPath, JsonConvert.SerializeObject(newCache));
 
+            NotificationSystem.Push(
+                notifIdentifier,
+                text: LocaleHelper.Translate($"{notifIdentifier}.Verifying"),
+                progressState: ProgressState.Indeterminate
+            );
+
             HashSet<string> knownModKeys = rows.Select(r => $"{r.SourceId}_{r.SourceVersion ?? ""}")
                 .ToHashSet();
 
@@ -833,12 +853,6 @@ namespace AssetDatabaseContributor.Systems
                 CancelTask(true, "No packages found to be validated");
                 return;
             }
-
-            NotificationSystem.Push(
-                notifIdentifier,
-                text: LocaleHelper.Translate($"{notifIdentifier}.Verifying"),
-                progressState: ProgressState.Indeterminate
-            );
 
             int validableMax = Math.Clamp(
                 Mod.m_Setting.PackCount,
@@ -869,12 +883,6 @@ namespace AssetDatabaseContributor.Systems
                 $"Preparing scan for {modsToCheck.Count} mods: {string.Join(", ", modsToCheck)}"
             );
 
-            NotificationSystem.Push(
-                notifIdentifier,
-                text: LocaleHelper.Translate($"{notifIdentifier}.Starting"),
-                progressState: ProgressState.Indeterminate
-            );
-
             ModsToCheck = modsToCheck;
 
             foreach (string item in ModsToCheck)
@@ -885,10 +893,17 @@ namespace AssetDatabaseContributor.Systems
                         new SourceDataRow() { SourceId = splits[0], SourceVersion = splits[1] }
                     );
             }
+
             await GetComponentData();
 
             if (!SentFileList)
             {
+                NotificationSystem.Push(
+                    notifIdentifier,
+                    text: LocaleHelper.Translate($"{notifIdentifier}.SharingFileList"),
+                    progressState: ProgressState.Indeterminate
+                );
+
                 HashSet<string> combo = PopulateLoadedPackages(LoadedCodeModsFromSMC);
                 combo.UnionWith(packages);
                 await ProcessFileLists(combo, fileLists);
@@ -948,20 +963,97 @@ namespace AssetDatabaseContributor.Systems
                 return;
 
             string storeUrl = $"{ApiBase}/cs2db/file-lists";
-            string storeJson = JsonConvert.SerializeObject(new { packages = payload });
 
-            using HttpRequestMessage upload = new(HttpMethod.Post, storeUrl);
-            upload.Content = new StringContent(storeJson, Encoding.UTF8, "application/json");
-            upload.Headers.Add("X-Api-Key", ApiKeyLocal.Value);
+            await UploadPackagesAsync(payload, storeUrl);
+        }
 
-            using HttpResponseMessage uploadResponse = await Http.SendAsync(upload);
+        public async Task UploadPackagesAsync(
+            Dictionary<string, List<FileHelper.FileEntry>> payload,
+            string storeUrl
+        )
+        {
+            const long MaxChunkSize = 50L * 1024 * 1024; //50 MB
 
-            if (!uploadResponse.IsSuccessStatusCode)
+            List<Dictionary<string, List<FileHelper.FileEntry>>> batches = new();
+            Dictionary<string, List<FileHelper.FileEntry>> currentBatch = new();
+            long currentSize = 0;
+
+            foreach (var item in payload)
             {
-                LogHelper.SendLog(await response.Content.ReadAsStringAsync(), LogLevel.DEVD);
-                CancelTask(false, $"File list upload rejected: {uploadResponse.StatusCode}");
+                string packageJson = JsonConvert.SerializeObject(
+                    new Dictionary<string, object> { [item.Key] = item.Value }
+                );
+
+                long packageSize = Encoding.UTF8.GetByteCount(packageJson);
+
+                long additionalSize = packageSize + 1;
+
+                if (additionalSize > MaxChunkSize)
+                {
+                    throw new InvalidOperationException(
+                        $"Package '{item.Key}' exceeds the 100 MB limit."
+                    );
+                }
+
+                if (currentBatch.Count > 0 && currentSize + additionalSize > MaxChunkSize)
+                {
+                    batches.Add(currentBatch);
+
+                    currentBatch = new Dictionary<string, List<FileHelper.FileEntry>>();
+                    currentSize = 0;
+                }
+
+                currentBatch[item.Key] = item.Value;
+                currentSize += additionalSize;
             }
-            return;
+
+            if (currentBatch.Count > 0)
+            {
+                batches.Add(currentBatch);
+            }
+
+            LogHelper.SendLog(
+                $"Uploading {payload.Count} packages in {batches.Count} batches.",
+                LogLevel.DEVD
+            );
+
+            for (int i = 0; i < batches.Count; i++)
+            {
+                string storeJson = JsonConvert.SerializeObject(new { packages = batches[i] });
+
+                long actualSize = Encoding.UTF8.GetByteCount(storeJson);
+
+                LogHelper.SendLog(
+                    $"Uploading batch {i + 1}/{batches.Count}: "
+                        + $"{actualSize / 1024.0 / 1024.0:F2} MB",
+                    LogLevel.DEVD
+                );
+
+                using HttpRequestMessage upload = new(HttpMethod.Post, storeUrl);
+
+                upload.Content = new StringContent(storeJson, Encoding.UTF8, "application/json");
+
+                upload.Headers.Add("X-Api-Key", ApiKeyLocal.Value);
+
+                using HttpResponseMessage uploadResponse = await Http.SendAsync(upload);
+
+                if (!uploadResponse.IsSuccessStatusCode)
+                {
+                    string error = await uploadResponse.Content.ReadAsStringAsync();
+
+                    LogHelper.SendLog(error, LogLevel.DEVD);
+
+                    CancelTask(
+                        false,
+                        $"File list upload failed at batch {i + 1}/{batches.Count}: "
+                            + $"{uploadResponse.StatusCode}"
+                    );
+
+                    return;
+                }
+            }
+
+            LogHelper.SendLog("All package batches uploaded successfully.", LogLevel.DEVD);
         }
 
         public async Task GetComponentData()
@@ -1170,6 +1262,12 @@ namespace AssetDatabaseContributor.Systems
         {
             try
             {
+                NotificationSystem.Push(
+                    notifIdentifier,
+                    text: LocaleHelper.Translate($"{notifIdentifier}.ExtractingData"),
+                    progressState: ProgressState.Indeterminate
+                );
+
                 HashSet<string> tempReject = ModsToReject;
                 if (ModsToReject.Count > 0)
                 {
@@ -1195,6 +1293,12 @@ namespace AssetDatabaseContributor.Systems
 
         public async Task SubmitZips()
         {
+            NotificationSystem.Push(
+                notifIdentifier,
+                text: LocaleHelper.Translate($"{notifIdentifier}.CollectingData"),
+                progressState: ProgressState.Indeterminate
+            );
+
             LogHelper.SendLog("Starting SubmitModZips", LogLevel.DEVD);
             if (!Directory.Exists($"{Mod.DataDir}\\~Extracted"))
             {
@@ -1256,15 +1360,15 @@ namespace AssetDatabaseContributor.Systems
 
             foreach (string zipPath in newZips)
             {
-                count++;
                 try
                 {
                     NotificationSystem.Push(
                         notifIdentifier,
-                        text: LocaleHelper.Translate($"{notifIdentifier}.Sharing"),
+                        text: LocaleHelper.Translate($"{notifIdentifier}.SharingData"),
                         progressState: ProgressState.Progressing,
                         progress: 100 * (count / newZips.Length)
                     );
+                    count++;
 
                     LogHelper.SendLog($"Sending {Path.GetFileName(zipPath)}", LogLevel.DEVD);
                     MultipartFormDataContent? content = new();
@@ -1334,6 +1438,12 @@ namespace AssetDatabaseContributor.Systems
                 LogHelper.SendLog($"No images to collect", LogLevel.DEVD);
                 return;
             }
+
+            NotificationSystem.Push(
+                notifIdentifier,
+                text: LocaleHelper.Translate($"{notifIdentifier}.CollectingImages"),
+                progressState: ProgressState.Indeterminate
+            );
 
             CollectedImages.Clear();
 
@@ -1532,6 +1642,13 @@ namespace AssetDatabaseContributor.Systems
 
             foreach (List<CollectedImage> batch in batches)
             {
+                NotificationSystem.Push(
+                    notifIdentifier,
+                    text: LocaleHelper.Translate($"{notifIdentifier}.SharingImages"),
+                    progressState: ProgressState.Progressing,
+                    progress: 100 * (zipIndex - 1 / batches.Count)
+                );
+
                 string zipName = $"~{timeNow}_images_{zipIndex}.adc";
                 string zipPath = Path.Combine(baseDirectory, zipName);
 
@@ -1629,7 +1746,7 @@ namespace AssetDatabaseContributor.Systems
                     delay: 3,
                     title: Mod.Name,
                     text: LocaleHelper.Translate($"{notifIdentifier}.Cancelled"),
-                    progressState: ProgressState.Cancelled,
+                    progressState: disabled ? ProgressState.Warning : ProgressState.Cancelled,
                     onClicked: () =>
                     {
                         WorldHelper
