@@ -1,4 +1,5 @@
-﻿using AssetDatabaseContributor.Systems;
+﻿using System;
+using AssetDatabaseContributor.Systems;
 using Game.Modding;
 using Game.Settings;
 using Game.UI;
@@ -105,7 +106,7 @@ namespace AssetDatabaseContributor
             foreach (var id in ids)
             {
                 var trimmed = id.Trim();
-                if (Regex.IsMatch(trimmed, @"^\d+_\d+$"))
+                if (Regex.IsMatch(trimmed, @"^\d+(?:_\d+)?$"))
                     list.Add(trimmed);
             }
 
@@ -119,7 +120,7 @@ namespace AssetDatabaseContributor
         }
 
         [SettingsUIDisplayName(overrideValue: "Extract Data")]
-        [SettingsUIDescription(overrideValue: "")]
+        [SettingsUIDescription(overrideValue: "Extract Data")]
         [SettingsUISection(GeneralTab, GeneralGroup)]
         [SettingsUIButton]
         public bool ExtractData
@@ -145,8 +146,8 @@ namespace AssetDatabaseContributor
             }
         }
 
-        [SettingsUIDisplayName(overrideValue: "MapTest")]
-        [SettingsUIDescription(overrideValue: "MapTest")]
+        [SettingsUIDisplayName(overrideValue: "Map Test")]
+        [SettingsUIDescription(overrideValue: "Map Test")]
         [SettingsUISection(GeneralTab, GeneralGroup)]
         [SettingsUIButton]
         public bool MapTest

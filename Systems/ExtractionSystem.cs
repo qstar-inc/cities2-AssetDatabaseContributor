@@ -11,7 +11,6 @@ using Colossal;
 using Colossal.IO.AssetDatabase;
 using Colossal.PSI.Environment;
 using Colossal.UI;
-using CSVFile;
 using Game;
 using Game.Assets;
 using Game.Prefabs;
@@ -370,6 +369,21 @@ namespace AssetDatabaseContributor.Systems
 
                 using ZipArchive archive = ZipFile.Open(zipPath, ZipArchiveMode.Create);
 
+                var metaEntry = archive.CreateEntry(
+                    "meta.json",
+                    System.IO.Compression.CompressionLevel.Optimal
+                );
+                using (var w = new StreamWriter(metaEntry.Open(), new UTF8Encoding(false)))
+                    w.Write(
+                        JsonConvert.SerializeObject(
+                            new
+                            {
+                                codeVersion = Mod.CodeVersion,
+                                gameVersion = Game.Version.current.shortVersion,
+                            }
+                        )
+                    );
+
                 if (prefabsForKey.Count > 0)
                 {
                     var entry = archive.CreateEntry(
@@ -378,18 +392,14 @@ namespace AssetDatabaseContributor.Systems
                     );
 
                     using (var writer = new StreamWriter(entry.Open(), new UTF8Encoding(false)))
-                    {
-                        writer.Write(CSV.Serialize(prefabs, GetCSVSetting()));
-                    }
+                        writer.Write(SerializeInvariant(prefabs));
 
                     entry = archive.CreateEntry(
                         "components.tsv",
                         System.IO.Compression.CompressionLevel.Optimal
                     );
                     using (var writer = new StreamWriter(entry.Open(), new UTF8Encoding(false)))
-                    {
-                        writer.Write(CSV.Serialize(components, GetCSVSetting()));
-                    }
+                        writer.Write(SerializeInvariant(components));
 
                     LogHelper.SendLog(
                         $"Wrote {prefabsForKey.Count} prefabs to 'prefabs.tsv'",
@@ -470,7 +480,7 @@ namespace AssetDatabaseContributor.Systems
                         System.IO.Compression.CompressionLevel.Optimal
                     );
                     using (var writer = new StreamWriter(mapEntry.Open(), new UTF8Encoding(false)))
-                        writer.Write(CSV.Serialize(mapDatas, GetCSVSetting()));
+                        writer.Write(SerializeInvariant(mapDatas));
 
                     LogHelper.SendLog($"Wrote {mapDatas.Count} maps to 'maps.tsv'", LogLevel.DEVD);
                 }
@@ -562,7 +572,7 @@ namespace AssetDatabaseContributor.Systems
                         );
                     }
 
-                    wrt_loc.Write(CSV.Serialize(localeRows, GetCSVSetting()));
+                    wrt_loc.Write(SerializeInvariant(localeRows));
 
                     LogHelper.SendLog(
                         $"Wrote {localeData.Count()} locale entries to 'locale.tsv'",
@@ -645,7 +655,7 @@ namespace AssetDatabaseContributor.Systems
                         );
                     }
 
-                    wrt_ca.Write(CSV.Serialize(componentAttributeRow, GetCSVSetting()));
+                    wrt_ca.Write(SerializeInvariant(componentAttributeRow));
 
                     LogHelper.SendLog(
                         $"Wrote {componentAttributeRow.Count} component attributes to 'components_attr.tsv'",
@@ -751,6 +761,12 @@ namespace AssetDatabaseContributor.Systems
                 if (AssetDatabase.global.resources.unityObjectsMap)
                     return $"<{unityObj.GetType().Name}>";
             }
+
+            if (value is AssetReference assetRef)
+                return assetRef.guid.ToString();
+
+            if (value is Colossal.Hash128 hash)
+                return hash.ToString();
 
             Type t = value.GetType();
 

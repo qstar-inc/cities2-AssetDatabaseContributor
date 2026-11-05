@@ -1,4 +1,5 @@
 ﻿using System.Collections.Generic;
+using System.Globalization;
 using Colossal.IO.AssetDatabase;
 using CSVFile;
 using Game;
@@ -50,6 +51,21 @@ namespace AssetDatabaseContributor.Systems
                 },
             };
             return settings;
+        }
+
+        internal static string SerializeInvariant<T>(IEnumerable<T> rows)
+            where T : class, new()
+        {
+            CultureInfo previous = CultureInfo.CurrentCulture;
+            CultureInfo.CurrentCulture = CultureInfo.InvariantCulture;
+            try
+            {
+                return CSV.Serialize(rows, GetCSVSetting());
+            }
+            finally
+            {
+                CultureInfo.CurrentCulture = previous;
+            }
         }
 
         internal static CSVSettings GetCSVSetting()

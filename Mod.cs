@@ -14,6 +14,8 @@ namespace AssetDatabaseContributor
     [GenerateModInfo]
     public partial class Mod : IMod
     {
+        internal const int CodeVersion = 5;
+
         public void OnLoad(UpdateSystem updateSystem)
         {
             Instance = this;

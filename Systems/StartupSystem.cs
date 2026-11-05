@@ -14,7 +14,6 @@ using System.Text;
 using System.Threading.Tasks;
 using AssetDatabaseContributor.Types;
 using Colossal.IO.AssetDatabase;
-using Colossal.Json;
 using Colossal.PSI.Common;
 using Colossal.Serialization.Entities;
 using Game;
@@ -60,6 +59,7 @@ namespace AssetDatabaseContributor.Systems
 
         internal const int CurrentSourceDataVersion = 3;
         internal const int CurrentComponentDataVersion = 3;
+        private const int MaxExtraFileLists = 25;
         private static long lastServerTime = 0;
         private DateTime nextRunTime = DateTime.MinValue;
 
@@ -380,6 +380,7 @@ namespace AssetDatabaseContributor.Systems
                 DataCacheSource newCache = new()
                 {
                     ServerTime = lastServerTime,
+                    CodeVersion = Mod.CodeVersion,
                     Rows = AllSources
                         .GroupBy(x => x.SourceId)
                         .Select(group => new Dictionary<string, string[]>
@@ -594,11 +595,14 @@ namespace AssetDatabaseContributor.Systems
                     if (cache == null)
                         goto sourceDataDownload;
 
-                    if (cache.Version != CurrentSourceDataVersion)
+                    if (
+                        cache.Version != CurrentSourceDataVersion
+                        || cache.CodeVersion != Mod.CodeVersion
+                    )
                     {
                         cache.ServerTime = 0;
                         cache.Rows = new();
-                        LogHelper.SendLog("SourceData version changed, wiping existing data...");
+                        LogHelper.SendLog("SourceData version mismatch, wiping existing data...");
                         goto sourceDataDownload;
                     }
 
@@ -723,6 +727,15 @@ namespace AssetDatabaseContributor.Systems
                 return;
             }
 
+            if (parsed.CodeVersion != Mod.CodeVersion)
+            {
+                CancelTask(
+                    true,
+                    $"Mod code version ({Mod.CodeVersion}) differs from server ({parsed.CodeVersion}). Update the mod..."
+                );
+                return;
+            }
+
             Dictionary<string, SourceDataRow>? merged = new();
 
             if (cache != null)
@@ -788,6 +801,7 @@ namespace AssetDatabaseContributor.Systems
             DataCacheSource newCache = new()
             {
                 ServerTime = lastServerTime,
+                CodeVersion = Mod.CodeVersion,
                 Rows = AllSources
                     .GroupBy(x => x.SourceId)
                     .Select(group => new Dictionary<string, string[]>
@@ -876,7 +890,7 @@ namespace AssetDatabaseContributor.Systems
             if (!SentFileList)
             {
                 HashSet<string> combo = PopulateLoadedPackages(LoadedCodeModsFromSMC);
-                combo.Union(packages);
+                combo.UnionWith(packages);
                 await ProcessFileLists(combo, fileLists);
                 SentFileList = true;
             }
@@ -924,7 +938,11 @@ namespace AssetDatabaseContributor.Systems
             }
 
             if (missing.Count > 0)
-                await ValidateModFoldersAsync(missing, 100, payload);
+            {
+                Random rng = new();
+                List<string> batch = missing.OrderBy(_ => rng.Next()).ToList();
+                await ValidateModFoldersAsync(batch, MaxExtraFileLists, payload);
+            }
 
             if (payload.Count == 0)
                 return;
@@ -1576,10 +1594,24 @@ namespace AssetDatabaseContributor.Systems
                     continue;
 
                 foreach (string file in Directory.GetFiles(folderPath))
-                    File.Delete(file);
+                    try
+                    {
+                        File.Delete(file);
+                    }
+                    catch (Exception e)
+                    {
+                        LogHelper.SendLog(e);
+                    }
 
                 foreach (string dir in Directory.GetDirectories(folderPath))
-                    Directory.Delete(dir, recursive: true);
+                    try
+                    {
+                        Directory.Delete(dir, recursive: true);
+                    }
+                    catch (Exception e)
+                    {
+                        LogHelper.SendLog(e);
+                    }
             }
         }
 
@@ -1651,9 +1683,9 @@ namespace AssetDatabaseContributor.Systems
 
                     ModData modData = new()
                     {
-                        modId = modFolderParts[0],
-                        modName = modFolderParts[0],
-                        modVersion = modFolderParts[1],
+                        ModId = modFolderParts[0],
+                        ModName = modFolderParts[0],
+                        ModVersion = modFolderParts[1],
                     };
 
                     try
@@ -1663,10 +1695,10 @@ namespace AssetDatabaseContributor.Systems
                             JObject jsonObject = JObject.Parse(
                                 await File.ReadAllTextAsync(metadataFile)
                             );
-                            modData.modName =
+                            modData.ModName =
                                 jsonObject["DisplayName"]?.ToString()
                                 ?? jsonObject["displayName"]?.ToString()
-                                ?? modData.modId.ToString();
+                                ?? modData.ModId.ToString();
                         }
                     }
                     catch (Exception ex)

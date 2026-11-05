@@ -1,7 +1,4 @@
-- Map package data are now contributed.
-- Locales now only export real content, no fallbacks.
-- File list for each verified mod packages (including what's inside zips) are now contributed.
-- Assets with custom components are no longer rejected.
-- Assets with custom components requires the dependent mod to be present before it's contributed.
-- Component data is now imported directly from the server instead of relying on mod updates.
-- Improved performance both on mod-side and server-side.
+- Ensure all data values are culture invariant.
+- Add Code Version validation.
+- Fix bug that prevented file list for non code items to be ignored.
+- Fix bug that throw errors when a zip in access (maybe by third party antivirus) is being deleted.

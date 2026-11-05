@@ -4,6 +4,7 @@ namespace AssetDatabaseContributor.Types
 {
     public class DataCacheSource
     {
+        public int CodeVersion { get; set; }
         public long ServerTime { get; set; }
         public List<Dictionary<string, string[]>> Rows { get; set; } = new();
         public int Version { get; set; }
